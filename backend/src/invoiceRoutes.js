@@ -9,39 +9,56 @@ const {
 
 const router = express.Router();
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const organisationId =
+    req.organisation.id;
+
   res.json({
     success: true,
-    invoices: listInvoices(),
+    invoices: listInvoices(
+      organisationId
+    ),
   });
 });
 
-router.get("/document/:documentId", (req, res) => {
-  const invoice = getInvoiceByDocumentId(
-    req.params.documentId
-  );
+router.get(
+  "/document/:documentId",
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
 
-  if (!invoice) {
-    return res.status(404).json({
-      success: false,
-      message:
-        "No extracted invoice exists for this document.",
+    const invoice =
+      getInvoiceByDocumentId(
+        req.params.documentId,
+        organisationId
+      );
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "No extracted invoice exists for this document.",
+      });
+    }
+
+    res.json({
+      success: true,
+      invoice,
     });
   }
-
-  res.json({
-    success: true,
-    invoice,
-  });
-});
+);
 
 router.post(
   "/process/:documentId",
   async (req, res, next) => {
     try {
+      const organisationId =
+        req.organisation.id;
+
       const invoice =
         await processInvoiceDocument(
-          req.params.documentId
+          req.params.documentId,
+          organisationId
         );
 
       res.json({
@@ -57,8 +74,12 @@ router.post(
 );
 
 router.get("/:id", (req, res) => {
+  const organisationId =
+    req.organisation.id;
+
   const invoice = getInvoiceById(
-    req.params.id
+    req.params.id,
+    organisationId
   );
 
   if (!invoice) {

@@ -8,6 +8,29 @@ export const api = axios.create({
 });
 
 const AUTH_TOKEN_KEY = "appa_auth_token";
+const ORGANISATION_KEY =
+  "appa_organisation_id";
+
+export function getStoredOrganisationId() {
+  return window.localStorage.getItem(
+    ORGANISATION_KEY
+  );
+}
+
+export function setStoredOrganisationId(
+  organisationId
+) {
+  if (organisationId) {
+    window.localStorage.setItem(
+      ORGANISATION_KEY,
+      organisationId
+    );
+  } else {
+    window.localStorage.removeItem(
+      ORGANISATION_KEY
+    );
+  }
+}
 
 export function getStoredAuthToken() {
   return window.localStorage.getItem(AUTH_TOKEN_KEY);
@@ -25,7 +48,16 @@ api.interceptors.request.use((config) => {
   const token = getStoredAuthToken();
 
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization =
+      `Bearer ${token}`;
+  }
+
+  const organisationId =
+    getStoredOrganisationId();
+
+  if (organisationId) {
+    config.headers["X-Organisation-Id"] =
+      organisationId;
   }
 
   return config;
@@ -39,6 +71,7 @@ api.interceptors.response.use(
       !error?.config?.url?.includes("/auth/login")
     ) {
       setStoredAuthToken(null);
+      setStoredOrganisationId(null);
 
       window.dispatchEvent(
         new CustomEvent("appa-auth-expired")
@@ -99,7 +132,27 @@ export async function changePassword(
 
 export async function getCurrentUser() {
   const response = await api.get("/auth/me");
-  return response.data.user;
+  const user = response.data.user;
+
+  const organisations =
+    user?.organisations || [];
+
+  const storedId =
+    getStoredOrganisationId();
+
+  const storedIsValid =
+    organisations.some(
+      (organisation) =>
+        organisation.id === storedId
+    );
+
+  if (!storedIsValid) {
+    setStoredOrganisationId(
+      organisations[0]?.id || null
+    );
+  }
+
+  return user;
 }
 
 export async function logoutUser() {

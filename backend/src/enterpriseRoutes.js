@@ -27,11 +27,18 @@ const router = express.Router();
    ========================================================= */
 
 function createAudit(
+  organisationId,
   action,
   entityType,
   entityId,
   description
 ) {
+  if (!organisationId) {
+    throw new Error(
+      "organisationId is required for enterprise audit events."
+    );
+  }
+
   db.prepare(`
     INSERT INTO audit_logs (
       id,
@@ -39,16 +46,18 @@ function createAudit(
       entity_type,
       entity_id,
       description,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     randomUUID(),
     action,
     entityType,
     entityId,
     description,
-    new Date().toISOString()
+    new Date().toISOString(),
+    organisationId
   );
 }
 
@@ -58,7 +67,10 @@ function createAudit(
 
 router.get(
   "/suppliers",
-  (_req, res) => {
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const suppliers = db.prepare(`
       SELECT
         id,
@@ -71,8 +83,9 @@ router.get(
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM suppliers
+      WHERE organisation_id = ?
       ORDER BY name
-    `).all();
+    `).all(organisationId);
 
     res.json({
       success: true,
@@ -87,7 +100,10 @@ router.get(
 
 router.get(
   "/purchase-orders",
-  (_req, res) => {
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const purchaseOrders = db.prepare(`
       SELECT
         po.id,
@@ -105,11 +121,17 @@ router.get(
         po.updated_at AS updatedAt
       FROM purchase_orders po
 
-      JOIN suppliers s
+      INNER JOIN suppliers s
         ON s.id = po.supplier_id
+        AND s.organisation_id =
+            po.organisation_id
 
-      ORDER BY po.created_at DESC
-    `).all();
+      WHERE
+        po.organisation_id = ?
+
+      ORDER BY
+        po.created_at DESC
+    `).all(organisationId);
 
     res.json({
       success: true,
@@ -121,29 +143,40 @@ router.get(
 router.get(
   "/purchase-orders/:id",
   (req, res) => {
-    const purchaseOrder = db.prepare(`
-      SELECT
-        po.id,
-        po.po_number AS poNumber,
-        po.supplier_id AS supplierId,
-        s.name AS supplierName,
-        s.supplier_code AS supplierCode,
-        s.email AS supplierEmail,
-        po.order_date AS orderDate,
-        po.currency,
-        po.subtotal,
-        po.tax_amount AS taxAmount,
-        po.total_amount AS totalAmount,
-        po.status,
-        po.created_at AS createdAt,
-        po.updated_at AS updatedAt
-      FROM purchase_orders po
+    const organisationId =
+      req.organisation.id;
 
-      JOIN suppliers s
-        ON s.id = po.supplier_id
+    const purchaseOrder =
+      db.prepare(`
+        SELECT
+          po.id,
+          po.po_number AS poNumber,
+          po.supplier_id AS supplierId,
+          s.name AS supplierName,
+          s.supplier_code AS supplierCode,
+          s.email AS supplierEmail,
+          po.order_date AS orderDate,
+          po.currency,
+          po.subtotal,
+          po.tax_amount AS taxAmount,
+          po.total_amount AS totalAmount,
+          po.status,
+          po.created_at AS createdAt,
+          po.updated_at AS updatedAt
+        FROM purchase_orders po
 
-      WHERE po.id = ?
-    `).get(req.params.id);
+        INNER JOIN suppliers s
+          ON s.id = po.supplier_id
+          AND s.organisation_id =
+              po.organisation_id
+
+        WHERE
+          po.id = ?
+          AND po.organisation_id = ?
+      `).get(
+        req.params.id,
+        organisationId
+      );
 
     if (!purchaseOrder) {
       return res.status(404).json({
@@ -156,16 +189,27 @@ router.get(
     purchaseOrder.lineItems =
       db.prepare(`
         SELECT
-          id,
-          description,
-          quantity,
-          unit_price AS unitPrice,
-          line_total AS lineTotal,
-          position
-        FROM purchase_order_items
-        WHERE purchase_order_id = ?
-        ORDER BY position
-      `).all(purchaseOrder.id);
+          poi.id,
+          poi.description,
+          poi.quantity,
+          poi.unit_price AS unitPrice,
+          poi.line_total AS lineTotal,
+          poi.position
+        FROM purchase_order_items poi
+
+        INNER JOIN purchase_orders po
+          ON po.id =
+             poi.purchase_order_id
+
+        WHERE
+          poi.purchase_order_id = ?
+          AND po.organisation_id = ?
+
+        ORDER BY poi.position
+      `).all(
+        purchaseOrder.id,
+        organisationId
+      );
 
     res.json({
       success: true,
@@ -182,9 +226,13 @@ router.post(
   "/matching/:invoiceId",
   (req, res, next) => {
     try {
+      const organisationId =
+        req.organisation.id;
+
       const match =
         matchInvoice(
-          req.params.invoiceId
+          req.params.invoiceId,
+          organisationId
         );
 
       res.json({
@@ -200,9 +248,13 @@ router.post(
 router.get(
   "/matching/:invoiceId",
   (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const match =
       getMatch(
-        req.params.invoiceId
+        req.params.invoiceId,
+        organisationId
       );
 
     if (!match) {
@@ -227,53 +279,98 @@ router.get(
 
 router.get(
   "/operations-summary",
-  (_req, res, next) => {
+  (req, res, next) => {
     try {
-      const openExceptions = db.prepare(`
-        SELECT COUNT(*) AS count
-        FROM exceptions
-        WHERE status = 'Open'
-      `).get().count;
+      const organisationId =
+        req.organisation.id;
 
-      const pendingApprovals = db.prepare(`
-        SELECT COUNT(*) AS count
-        FROM invoices i
-        LEFT JOIN invoice_matches m
-          ON m.invoice_id = i.id
-        WHERE
-          m.match_status = 'Matched'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM exceptions e
-            WHERE
-              e.invoice_id = i.id
-              AND e.status = 'Open'
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM approvals a
-            WHERE a.invoice_id = i.id
-          )
-      `).get().count;
+      const openExceptions =
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM exceptions e
 
-      const exceptionInvoices = db.prepare(`
-        SELECT COUNT(DISTINCT invoice_id) AS count
-        FROM exceptions
-        WHERE status = 'Open'
-      `).get().count;
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
 
-      const latestAutomation = db.prepare(`
-        SELECT
-          id,
-          process_name AS processName,
-          source,
-          status,
-          started_at AS startedAt,
-          completed_at AS completedAt
-        FROM automation_runs
-        ORDER BY started_at DESC
-        LIMIT 1
-      `).get() || null;
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            e.status = 'Open'
+            AND d.organisation_id = ?
+        `).get(
+          organisationId
+        ).count;
+
+      const pendingApprovals =
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          INNER JOIN invoice_matches m
+            ON m.invoice_id = i.id
+
+          WHERE
+            d.organisation_id = ?
+            AND m.match_status = 'Matched'
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM exceptions e
+              WHERE
+                e.invoice_id = i.id
+                AND e.status = 'Open'
+            )
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM approvals a
+              WHERE a.invoice_id = i.id
+            )
+        `).get(
+          organisationId
+        ).count;
+
+      const exceptionInvoices =
+        db.prepare(`
+          SELECT
+            COUNT(
+              DISTINCT e.invoice_id
+            ) AS count
+          FROM exceptions e
+
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            e.status = 'Open'
+            AND d.organisation_id = ?
+        `).get(
+          organisationId
+        ).count;
+
+      const latestAutomation =
+        db.prepare(`
+          SELECT
+            id,
+            process_name AS processName,
+            source,
+            status,
+            started_at AS startedAt,
+            completed_at AS completedAt
+          FROM automation_runs
+          WHERE organisation_id = ?
+          ORDER BY started_at DESC
+          LIMIT 1
+        `).get(
+          organisationId
+        ) || null;
 
       res.json({
         success: true,
@@ -282,7 +379,8 @@ router.get(
           openExceptions,
           exceptionInvoices,
           automationStatus:
-            latestAutomation?.status || "Idle",
+            latestAutomation?.status ||
+            "Idle",
           latestAutomation,
         },
       });
@@ -294,64 +392,76 @@ router.get(
 
 router.get(
   "/approvals/pending",
-  (_req, res, next) => {
+  (req, res, next) => {
     try {
-      const pending = db.prepare(`
-        SELECT
-          i.id AS invoiceId,
-          i.invoice_number AS invoiceNumber,
-          i.supplier_name AS supplierName,
-          i.currency,
-          i.total_amount AS totalAmount,
-          i.purchase_order_number AS purchaseOrderNumber,
-          i.invoice_date AS invoiceDate,
-          i.due_date AS dueDate,
-          i.extraction_confidence AS extractionConfidence,
-          i.validation_status AS validationStatus,
+      const organisationId =
+        req.organisation.id;
 
-          m.match_score AS matchScore,
-          m.match_status AS matchStatus,
-          m.variance_amount AS varianceAmount,
-          m.updated_at AS matchedAt,
+      const pending =
+        db.prepare(`
+          SELECT
+            i.id AS invoiceId,
+            i.invoice_number AS invoiceNumber,
+            i.supplier_name AS supplierName,
+            i.currency,
+            i.total_amount AS totalAmount,
+            i.purchase_order_number
+              AS purchaseOrderNumber,
+            i.invoice_date AS invoiceDate,
+            i.due_date AS dueDate,
+            i.extraction_confidence
+              AS extractionConfidence,
+            i.validation_status
+              AS validationStatus,
 
-          (
-            SELECT COUNT(*)
-            FROM exceptions e
-            WHERE
-              e.invoice_id = i.id
-              AND e.status = 'Open'
-          ) AS openExceptionCount
+            m.match_score AS matchScore,
+            m.match_status AS matchStatus,
+            m.variance_amount
+              AS varianceAmount,
+            m.updated_at AS matchedAt,
 
-        FROM invoices i
+            (
+              SELECT COUNT(*)
+              FROM exceptions e
+              WHERE
+                e.invoice_id = i.id
+                AND e.status = 'Open'
+            ) AS openExceptionCount
 
-        JOIN invoice_matches m
-          ON m.invoice_id = i.id
+          FROM invoices i
 
-        WHERE
-          m.match_status = 'Matched'
+          INNER JOIN documents d
+            ON d.id = i.document_id
 
-          AND NOT EXISTS (
-            SELECT 1
-            FROM exceptions e
-            WHERE
-              e.invoice_id = i.id
-              AND e.status = 'Open'
-          )
+          INNER JOIN invoice_matches m
+            ON m.invoice_id = i.id
 
-          AND NOT EXISTS (
-            SELECT 1
-            FROM approvals a
-            WHERE a.invoice_id = i.id
-          )
+          WHERE
+            d.organisation_id = ?
+            AND m.match_status = 'Matched'
 
-        ORDER BY
-          COALESCE(i.due_date, i.created_at) ASC,
-          i.created_at ASC
-      `).all();
+            AND NOT EXISTS (
+              SELECT 1
+              FROM exceptions e
+              WHERE
+                e.invoice_id = i.id
+                AND e.status = 'Open'
+            )
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM approvals a
+              WHERE a.invoice_id = i.id
+            )
+
+          ORDER BY
+            m.updated_at DESC
+        `).all(
+          organisationId
+        );
 
       res.json({
         success: true,
-        total: pending.length,
         pending,
       });
     } catch (error) {
@@ -366,30 +476,43 @@ router.get(
 
 router.get(
   "/approvals",
-  (_req, res) => {
-    const approvals = db.prepare(`
-      SELECT
-        a.id,
-        a.invoice_id AS invoiceId,
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
 
-        i.invoice_number AS invoiceNumber,
-        i.supplier_name AS supplierName,
-        i.currency,
-        i.total_amount AS totalAmount,
+    const approvals =
+      db.prepare(`
+        SELECT
+          a.id,
+          a.invoice_id AS invoiceId,
 
-        a.decision,
-        a.approval_type AS approvalType,
-        a.approver,
-        a.comments,
-        a.created_at AS createdAt
+          i.invoice_number AS invoiceNumber,
+          i.supplier_name AS supplierName,
+          i.currency,
+          i.total_amount AS totalAmount,
 
-      FROM approvals a
+          a.decision,
+          a.approval_type AS approvalType,
+          a.approver,
+          a.comments,
+          a.created_at AS createdAt
 
-      JOIN invoices i
-        ON i.id = a.invoice_id
+        FROM approvals a
 
-      ORDER BY a.created_at DESC
-    `).all();
+        INNER JOIN invoices i
+          ON i.id = a.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          d.organisation_id = ?
+
+        ORDER BY
+          a.created_at DESC
+      `).all(
+        organisationId
+      );
 
     res.json({
       success: true,
@@ -401,10 +524,16 @@ router.get(
 router.post(
   "/approvals/:invoiceId",
   (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const {
       decision,
       comments = "",
-      approver = "Administrator",
+      approver =
+        req.user?.fullName ||
+        req.user?.email ||
+        "Authenticated User",
     } = req.body || {};
 
     if (
@@ -420,13 +549,21 @@ router.post(
       });
     }
 
-    const invoice = db.prepare(`
-      SELECT *
-      FROM invoices
-      WHERE id = ?
-    `).get(
-      req.params.invoiceId
-    );
+    const invoice =
+      db.prepare(`
+        SELECT i.*
+        FROM invoices i
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          i.id = ?
+          AND d.organisation_id = ?
+      `).get(
+        req.params.invoiceId,
+        organisationId
+      );
 
     if (!invoice) {
       return res.status(404).json({
@@ -439,12 +576,21 @@ router.post(
     const openExceptionCount =
       db.prepare(`
         SELECT COUNT(*) AS count
-        FROM exceptions
+        FROM exceptions e
+
+        INNER JOIN invoices i
+          ON i.id = e.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
         WHERE
-          invoice_id = ?
-          AND status = 'Open'
+          e.invoice_id = ?
+          AND e.status = 'Open'
+          AND d.organisation_id = ?
       `).get(
-        req.params.invoiceId
+        invoice.id,
+        organisationId
       ).count;
 
     if (
@@ -453,36 +599,16 @@ router.post(
     ) {
       return res.status(409).json({
         success: false,
-        code: "OPEN_EXCEPTIONS",
         message:
-          `Invoice cannot be approved while ${openExceptionCount} unresolved exception${openExceptionCount === 1 ? "" : "s"} remain.`,
-        openExceptionCount,
+          "Invoice cannot be approved while open exceptions exist.",
       });
     }
 
-    const currentMatch =
-      getMatch(
-        req.params.invoiceId
-      );
-
-    if (
-      decision === "Approved" &&
-      (
-        !currentMatch ||
-        currentMatch.matchStatus !== "Matched"
-      )
-    ) {
-      return res.status(409).json({
-        success: false,
-        code: "MATCH_REQUIRED",
-        message:
-          "Invoice must have a successful PO match before manual approval.",
-      });
-    }
-
-
-    const id =
+    const approvalId =
       randomUUID();
+
+    const createdAt =
+      new Date().toISOString();
 
     db.prepare(`
       INSERT INTO approvals (
@@ -496,28 +622,53 @@ router.post(
       )
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id,
+      approvalId,
       invoice.id,
       decision,
       "Manual",
-      approver,
-      comments,
-      new Date().toISOString()
+      String(approver).trim() ||
+        "Authenticated User",
+      String(comments || "").trim(),
+      createdAt
     );
 
     createAudit(
-      decision === "Approved"
-        ? "INVOICE_MANUALLY_APPROVED"
-        : "INVOICE_REJECTED",
-      "invoice",
-      invoice.id,
-      `${invoice.invoice_number} ${decision.toLowerCase()} by ${approver}`
+      organisationId,
+      "INVOICE_APPROVAL_RECORDED",
+      "approval",
+      approvalId,
+      `${invoice.invoice_number}: ${decision}`
     );
+
+    const approval =
+      db.prepare(`
+        SELECT
+          a.id,
+          a.invoice_id AS invoiceId,
+          a.decision,
+          a.approval_type AS approvalType,
+          a.approver,
+          a.comments,
+          a.created_at AS createdAt
+        FROM approvals a
+
+        INNER JOIN invoices i
+          ON i.id = a.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          a.id = ?
+          AND d.organisation_id = ?
+      `).get(
+        approvalId,
+        organisationId
+      );
 
     res.status(201).json({
       success: true,
-      approvalId: id,
-      decision,
+      approval,
     });
   }
 );
@@ -528,37 +679,49 @@ router.post(
 
 router.get(
   "/exceptions",
-  (_req, res) => {
-    const exceptions = db.prepare(`
-      SELECT
-        e.id,
-        e.invoice_id AS invoiceId,
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
 
-        i.invoice_number AS invoiceNumber,
-        i.supplier_name AS supplierName,
-        i.currency,
-        i.total_amount AS totalAmount,
+    const exceptions =
+      db.prepare(`
+        SELECT
+          e.id,
+          e.invoice_id AS invoiceId,
 
-        e.exception_type AS exceptionType,
-        e.severity,
-        e.description,
-        e.status,
-        e.resolution,
-        e.created_at AS createdAt,
-        e.resolved_at AS resolvedAt
+          i.invoice_number AS invoiceNumber,
+          i.supplier_name AS supplierName,
+          i.currency,
+          i.total_amount AS totalAmount,
 
-      FROM exceptions e
+          e.exception_type AS exceptionType,
+          e.severity,
+          e.description,
+          e.status,
+          e.resolution,
+          e.created_at AS createdAt,
+          e.resolved_at AS resolvedAt
 
-      JOIN invoices i
-        ON i.id = e.invoice_id
+        FROM exceptions e
 
-      ORDER BY
-        CASE e.status
-          WHEN 'Open' THEN 0
-          ELSE 1
-        END,
-        e.created_at DESC
-    `).all();
+        INNER JOIN invoices i
+          ON i.id = e.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          d.organisation_id = ?
+
+        ORDER BY
+          CASE e.status
+            WHEN 'Open' THEN 0
+            ELSE 1
+          END,
+          e.created_at DESC
+      `).all(
+        organisationId
+      );
 
     res.json({
       success: true,
@@ -570,6 +733,9 @@ router.get(
 router.post(
   "/exceptions/:id/resolve",
   (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const resolution =
       String(
         req.body?.resolution || ""
@@ -585,10 +751,24 @@ router.post(
 
     const exception =
       db.prepare(`
-        SELECT *
-        FROM exceptions
-        WHERE id = ?
-      `).get(req.params.id);
+        SELECT
+          e.*,
+          i.invoice_number AS invoiceNumber
+        FROM exceptions e
+
+        INNER JOIN invoices i
+          ON i.id = e.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          e.id = ?
+          AND d.organisation_id = ?
+      `).get(
+        req.params.id,
+        organisationId
+      );
 
     if (!exception) {
       return res.status(404).json({
@@ -601,31 +781,79 @@ router.post(
     const now =
       new Date().toISOString();
 
-    db.prepare(`
-      UPDATE exceptions
-      SET
-        status = 'Resolved',
-        resolution = ?,
-        resolved_at = ?
-      WHERE id = ?
-    `).run(
-      resolution,
-      now,
-      exception.id
-    );
+    const update =
+      db.prepare(`
+        UPDATE exceptions
+        SET
+          status = 'Resolved',
+          resolution = ?,
+          resolved_at = ?
+        WHERE
+          id = ?
+          AND invoice_id IN (
+            SELECT i.id
+            FROM invoices i
+
+            INNER JOIN documents d
+              ON d.id = i.document_id
+
+            WHERE
+              d.organisation_id = ?
+          )
+      `).run(
+        resolution,
+        now,
+        exception.id,
+        organisationId
+      );
+
+    if (update.changes !== 1) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Exception not found.",
+      });
+    }
 
     createAudit(
+      organisationId,
       "EXCEPTION_RESOLVED",
       "exception",
       exception.id,
-      resolution
+      `${exception.invoiceNumber}: ${resolution}`
     );
+
+    const resolved =
+      db.prepare(`
+        SELECT
+          e.id,
+          e.invoice_id AS invoiceId,
+          e.exception_type AS exceptionType,
+          e.severity,
+          e.description,
+          e.status,
+          e.resolution,
+          e.created_at AS createdAt,
+          e.resolved_at AS resolvedAt
+        FROM exceptions e
+
+        INNER JOIN invoices i
+          ON i.id = e.invoice_id
+
+        INNER JOIN documents d
+          ON d.id = i.document_id
+
+        WHERE
+          e.id = ?
+          AND d.organisation_id = ?
+      `).get(
+        exception.id,
+        organisationId
+      );
 
     res.json({
       success: true,
-      exceptionId:
-        exception.id,
-      status: "Resolved",
+      exception: resolved,
     });
   }
 );
@@ -636,7 +864,10 @@ router.post(
 
 router.get(
   "/automation-runs",
-  (_req, res) => {
+  (req, res) => {
+    const organisationId =
+      req.organisation.id;
+
     const runs = db.prepare(`
       SELECT
         id,
@@ -650,9 +881,12 @@ router.get(
         completed_at AS completedAt,
         details
       FROM automation_runs
+      WHERE organisation_id = ?
       ORDER BY started_at DESC
       LIMIT 100
-    `).all();
+    `).all(
+      organisationId
+    );
 
     res.json({
       success: true,
@@ -664,6 +898,9 @@ router.get(
 router.post(
   "/automation/run-ap-cycle",
   (req, res, next) => {
+    const organisationId =
+      req.organisation.id;
+
     const runId =
       randomUUID();
 
@@ -681,26 +918,36 @@ router.post(
         source,
         status,
         started_at,
-        details
+        details,
+        organisation_id
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       "Accounts Payable Matching Cycle",
       source,
       "Running",
       startedAt,
-      "Processing validated invoices through the APPA PO matching engine."
+      "Processing validated invoices through the APPA PO matching engine.",
+      organisationId
     );
 
     try {
       const invoices =
         db.prepare(`
-          SELECT id
-          FROM invoices
-          WHERE validation_status =
-            'Validated'
-        `).all();
+          SELECT i.id
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            i.validation_status =
+              'Validated'
+            AND d.organisation_id = ?
+        `).all(
+          organisationId
+        );
 
       let succeeded = 0;
       let failed = 0;
@@ -712,7 +959,8 @@ router.post(
         try {
           const matchResult =
             matchInvoice(
-              invoice.id
+              invoice.id,
+              organisationId
             );
 
           if (
@@ -742,27 +990,38 @@ router.post(
           ? "Completed with exceptions"
           : "Completed";
 
-      db.prepare(`
-        UPDATE automation_runs
-        SET
-          status = ?,
-          items_processed = ?,
-          items_succeeded = ?,
-          items_failed = ?,
-          completed_at = ?,
-          details = ?
-        WHERE id = ?
-      `).run(
-        status,
-        invoices.length,
-        succeeded,
-        failed,
-        completedAt,
-        `Processed ${invoices.length} validated invoice(s).`,
-        runId
-      );
+      const update =
+        db.prepare(`
+          UPDATE automation_runs
+          SET
+            status = ?,
+            items_processed = ?,
+            items_succeeded = ?,
+            items_failed = ?,
+            completed_at = ?,
+            details = ?
+          WHERE
+            id = ?
+            AND organisation_id = ?
+        `).run(
+          status,
+          invoices.length,
+          succeeded,
+          failed,
+          completedAt,
+          `Processed ${invoices.length} validated invoice(s).`,
+          runId,
+          organisationId
+        );
+
+      if (update.changes !== 1) {
+        throw new Error(
+          "Automation run ownership validation failed."
+        );
+      }
 
       createAudit(
+        organisationId,
         "AUTOMATION_RUN_COMPLETED",
         "automation_run",
         runId,
@@ -783,8 +1042,13 @@ router.post(
             completed_at AS completedAt,
             details
           FROM automation_runs
-          WHERE id = ?
-        `).get(runId);
+          WHERE
+            id = ?
+            AND organisation_id = ?
+        `).get(
+          runId,
+          organisationId
+        );
 
       res.json({
         success: true,
@@ -797,11 +1061,14 @@ router.post(
           status = 'Failed',
           completed_at = ?,
           details = ?
-        WHERE id = ?
+        WHERE
+          id = ?
+          AND organisation_id = ?
       `).run(
         new Date().toISOString(),
         error.message,
-        runId
+        runId,
+        organisationId
       );
 
       next(error);
@@ -815,117 +1082,183 @@ router.post(
 
 router.get(
   "/dashboard",
-  (_req, res, next) => {
+  (req, res, next) => {
     try {
-      function scalar(sql, params = []) {
-        const row = db.prepare(sql).get(...params);
-        return Number(row?.value || 0);
+      const organisationId =
+        req.organisation.id;
+
+      function scalar(
+        sql,
+        params = [organisationId]
+      ) {
+        const row =
+          db.prepare(sql).get(...params);
+
+        return Number(
+          row?.value || 0
+        );
       }
 
       const dashboard = {
         documents: scalar(`
           SELECT COUNT(*) AS value
           FROM documents
+          WHERE organisation_id = ?
         `),
 
         invoices: scalar(`
           SELECT COUNT(*) AS value
-          FROM invoices
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE d.organisation_id = ?
         `),
 
         invoiceValue: scalar(`
           SELECT
             COALESCE(
-              SUM(total_amount),
+              SUM(i.total_amount),
               0
             ) AS value
-          FROM invoices
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE d.organisation_id = ?
         `),
 
         suppliers: scalar(`
           SELECT COUNT(*) AS value
           FROM suppliers
+          WHERE organisation_id = ?
         `),
 
         purchaseOrders: scalar(`
           SELECT COUNT(*) AS value
           FROM purchase_orders
+          WHERE organisation_id = ?
         `),
 
         matchedInvoices: scalar(`
           SELECT COUNT(*) AS value
-          FROM invoice_matches
-          WHERE match_status = 'Matched'
+          FROM invoice_matches im
+          INNER JOIN invoices i
+            ON i.id = im.invoice_id
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE
+            im.match_status = 'Matched'
+            AND d.organisation_id = ?
         `),
 
         openExceptions: scalar(`
           SELECT COUNT(*) AS value
-          FROM exceptions
-          WHERE status = 'Open'
+          FROM exceptions e
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE
+            e.status = 'Open'
+            AND d.organisation_id = ?
         `),
 
         approvals: scalar(`
           SELECT COUNT(*) AS value
-          FROM approvals
-          WHERE decision = 'Approved'
+          FROM approvals a
+          INNER JOIN invoices i
+            ON i.id = a.invoice_id
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE
+            a.decision = 'Approved'
+            AND d.organisation_id = ?
         `),
 
         automationRuns: scalar(`
           SELECT COUNT(*) AS value
           FROM automation_runs
+          WHERE organisation_id = ?
         `),
       };
 
-      const pendingApprovals = scalar(`
-        SELECT COUNT(*) AS value
-        FROM invoices i
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM approvals a
-          WHERE a.invoice_id = i.id
-            AND a.decision = 'Approved'
-        )
-      `);
+      const pendingApprovals =
+        scalar(`
+          SELECT COUNT(*) AS value
+          FROM invoices i
 
-      const pendingApprovalValue = scalar(`
-        SELECT
-          COALESCE(
-            SUM(i.total_amount),
-            0
-          ) AS value
-        FROM invoices i
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM approvals a
-          WHERE a.invoice_id = i.id
-            AND a.decision = 'Approved'
-        )
-      `);
+          INNER JOIN documents d
+            ON d.id = i.document_id
 
-      const automationTotals = db.prepare(`
-        SELECT
-          COALESCE(
-            SUM(items_processed),
-            0
-          ) AS processed,
+          WHERE
+            d.organisation_id = ?
 
-          COALESCE(
-            SUM(items_succeeded),
-            0
-          ) AS succeeded,
+            AND NOT EXISTS (
+              SELECT 1
+              FROM approvals a
+              WHERE
+                a.invoice_id = i.id
+                AND a.decision = 'Approved'
+            )
+        `);
 
-          COALESCE(
-            SUM(items_failed),
-            0
-          ) AS failed
-        FROM automation_runs
-      `).get();
+      const pendingApprovalValue =
+        scalar(`
+          SELECT
+            COALESCE(
+              SUM(i.total_amount),
+              0
+            ) AS value
+
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM approvals a
+              WHERE
+                a.invoice_id = i.id
+                AND a.decision = 'Approved'
+            )
+        `);
+
+      const automationTotals =
+        db.prepare(`
+          SELECT
+            COALESCE(
+              SUM(items_processed),
+              0
+            ) AS processed,
+
+            COALESCE(
+              SUM(items_succeeded),
+              0
+            ) AS succeeded,
+
+            COALESCE(
+              SUM(items_failed),
+              0
+            ) AS failed
+
+          FROM automation_runs
+          WHERE organisation_id = ?
+        `).get(
+          organisationId
+        );
 
       const processedItems =
-        Number(automationTotals?.processed || 0);
+        Number(
+          automationTotals?.processed || 0
+        );
 
       const succeededItems =
-        Number(automationTotals?.succeeded || 0);
+        Number(
+          automationTotals?.succeeded || 0
+        );
 
       const automationSuccessRate =
         processedItems > 0
@@ -938,158 +1271,253 @@ router.get(
             )
           : 0;
 
-      const recentTransactions = db.prepare(`
-        SELECT
-          i.id,
-          i.invoice_number AS invoice,
-          i.supplier_name AS supplier,
-          i.currency,
-          COALESCE(
-            i.total_amount,
-            0
-          ) AS amount,
-          i.validation_status AS validationStatus,
-          i.updated_at AS updatedAt,
+      const recentTransactions =
+        db.prepare(`
+          SELECT
+            i.id,
+            i.invoice_number AS invoice,
+            i.supplier_name AS supplier,
+            i.currency,
 
-          im.match_status AS matchStatus,
+            COALESCE(
+              i.total_amount,
+              0
+            ) AS amount,
 
-          (
-            SELECT a.decision
-            FROM approvals a
-            WHERE a.invoice_id = i.id
-            ORDER BY a.created_at DESC
-            LIMIT 1
-          ) AS approvalDecision,
+            i.validation_status
+              AS validationStatus,
 
-          (
-            SELECT COUNT(*)
-            FROM exceptions e
-            WHERE e.invoice_id = i.id
-              AND e.status = 'Open'
-          ) AS openExceptionCount
+            i.updated_at AS updatedAt,
 
-        FROM invoices i
+            im.match_status
+              AS matchStatus,
 
-        LEFT JOIN invoice_matches im
-          ON im.invoice_id = i.id
+            (
+              SELECT a.decision
+              FROM approvals a
+              WHERE
+                a.invoice_id = i.id
+              ORDER BY
+                a.created_at DESC
+              LIMIT 1
+            ) AS approvalDecision,
 
-        ORDER BY
-          datetime(i.updated_at) DESC,
-          i.updated_at DESC
+            (
+              SELECT COUNT(*)
+              FROM exceptions e
+              WHERE
+                e.invoice_id = i.id
+                AND e.status = 'Open'
+            ) AS openExceptionCount
 
-        LIMIT 5
-      `).all().map((row) => {
-        let status = "Processing";
+          FROM invoices i
 
-        if (Number(row.openExceptionCount) > 0) {
-          status = "Exception";
-        } else if (
-          row.approvalDecision === "Approved"
-        ) {
-          status = "Completed";
-        } else if (
-          row.matchStatus === "Matched"
-        ) {
-          status = "Approval";
-        } else if (
-          row.validationStatus === "Validated"
-        ) {
-          status = "Processing";
-        }
+          INNER JOIN documents d
+            ON d.id = i.document_id
 
-        return {
-          ...row,
-          status,
-        };
-      });
+          LEFT JOIN invoice_matches im
+            ON im.invoice_id = i.id
 
-      const recentAutomationRuns = db.prepare(`
-        SELECT
-          id,
-          process_name AS title,
-          source AS subtitle,
-          status,
-          items_processed AS itemsProcessed,
-          items_succeeded AS itemsSucceeded,
-          items_failed AS itemsFailed,
-          started_at AS startedAt,
-          completed_at AS completedAt
-        FROM automation_runs
-        ORDER BY
-          datetime(started_at) DESC,
-          started_at DESC
-        LIMIT 3
-      `).all();
+          WHERE
+            d.organisation_id = ?
 
-      const dailyVolume = db.prepare(`
-        WITH RECURSIVE days(day) AS (
-          SELECT date('now', '-6 days')
+          ORDER BY
+            datetime(i.updated_at) DESC,
+            i.updated_at DESC
 
-          UNION ALL
+          LIMIT 5
+        `).all(
+          organisationId
+        ).map((row) => {
+          let status = "Processing";
 
-          SELECT date(day, '+1 day')
+          if (
+            Number(
+              row.openExceptionCount
+            ) > 0
+          ) {
+            status = "Exception";
+          } else if (
+            row.approvalDecision ===
+            "Approved"
+          ) {
+            status = "Completed";
+          } else if (
+            row.matchStatus ===
+            "Matched"
+          ) {
+            status = "Approval";
+          } else if (
+            row.validationStatus ===
+            "Validated"
+          ) {
+            status = "Processing";
+          }
+
+          return {
+            ...row,
+            status,
+          };
+        });
+
+      const recentAutomationRuns =
+        db.prepare(`
+          SELECT
+            id,
+            process_name AS title,
+            source AS subtitle,
+            status,
+            items_processed AS itemsProcessed,
+            items_succeeded AS itemsSucceeded,
+            items_failed AS itemsFailed,
+            started_at AS startedAt,
+            completed_at AS completedAt
+
+          FROM automation_runs
+
+          WHERE
+            organisation_id = ?
+
+          ORDER BY
+            datetime(started_at) DESC,
+            started_at DESC
+
+          LIMIT 3
+        `).all(
+          organisationId
+        );
+
+      const dailyVolume =
+        db.prepare(`
+          WITH RECURSIVE days(day) AS (
+            SELECT date('now', '-6 days')
+
+            UNION ALL
+
+            SELECT date(day, '+1 day')
+            FROM days
+            WHERE day < date('now')
+          )
+
+          SELECT
+            days.day AS date,
+            COUNT(i.id) AS count
+
           FROM days
-          WHERE day < date('now')
-        )
 
-        SELECT
-          days.day AS date,
-          COUNT(i.id) AS count
-        FROM days
+          LEFT JOIN (
+            SELECT
+              i.id,
+              i.created_at
+            FROM invoices i
 
-        LEFT JOIN invoices i
-          ON date(i.created_at) = days.day
+            INNER JOIN documents d
+              ON d.id = i.document_id
 
-        GROUP BY days.day
-        ORDER BY days.day
-      `).all();
+            WHERE
+              d.organisation_id = ?
+          ) i
+            ON date(i.created_at) =
+               days.day
 
-      const mismatchCount = scalar(`
-        SELECT COUNT(*) AS value
-        FROM exceptions
-        WHERE status = 'Open'
-          AND (
-            UPPER(exception_type)
-              LIKE '%MISMATCH%'
+          GROUP BY days.day
+          ORDER BY days.day
+        `).all(
+          organisationId
+        );
 
-            OR UPPER(exception_type)
-              LIKE '%AMOUNT%'
+      const mismatchCount =
+        scalar(`
+          SELECT COUNT(*) AS value
 
-            OR UPPER(exception_type)
-              LIKE '%LINE%'
-          )
-      `);
+          FROM exceptions e
 
-      const lowConfidenceDocuments = scalar(`
-        SELECT COUNT(*) AS value
-        FROM invoices
-        WHERE
-          COALESCE(
-            extraction_confidence,
-            0
-          ) < 80
-      `);
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
 
-      const overdueApprovals = scalar(`
-        SELECT COUNT(*) AS value
-        FROM invoices i
-        WHERE datetime(i.created_at)
-          <= datetime('now', '-24 hours')
+          INNER JOIN documents d
+            ON d.id = i.document_id
 
-          AND NOT EXISTS (
-            SELECT 1
-            FROM approvals a
-            WHERE a.invoice_id = i.id
-              AND a.decision = 'Approved'
-          )
-      `);
+          WHERE
+            e.status = 'Open'
+            AND d.organisation_id = ?
 
-      const openHighSeverityExceptions = scalar(`
-        SELECT COUNT(*) AS value
-        FROM exceptions
-        WHERE status = 'Open'
-          AND UPPER(severity) = 'HIGH'
-      `);
+            AND (
+              UPPER(e.exception_type)
+                LIKE '%MISMATCH%'
+
+              OR UPPER(e.exception_type)
+                LIKE '%AMOUNT%'
+
+              OR UPPER(e.exception_type)
+                LIKE '%LINE%'
+            )
+        `);
+
+      const lowConfidenceDocuments =
+        scalar(`
+          SELECT COUNT(*) AS value
+
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+            AND COALESCE(
+              i.extraction_confidence,
+              0
+            ) < 80
+        `);
+
+      const overdueApprovals =
+        scalar(`
+          SELECT COUNT(*) AS value
+
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+            AND datetime(i.created_at)
+              <= datetime(
+                'now',
+                '-24 hours'
+              )
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM approvals a
+              WHERE
+                a.invoice_id = i.id
+                AND a.decision =
+                  'Approved'
+            )
+        `);
+
+      const openHighSeverityExceptions =
+        scalar(`
+          SELECT COUNT(*) AS value
+
+          FROM exceptions e
+
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            e.status = 'Open'
+            AND UPPER(e.severity) =
+              'HIGH'
+            AND d.organisation_id = ?
+        `);
 
       res.json({
         success: true,
@@ -1101,12 +1529,18 @@ router.get(
           pendingApprovalValue,
 
           automation: {
-            processed: processedItems,
-            succeeded: succeededItems,
+            processed:
+              processedItems,
+
+            succeeded:
+              succeededItems,
+
             failed:
               Number(
-                automationTotals?.failed || 0
+                automationTotals
+                  ?.failed || 0
               ),
+
             successRate:
               automationSuccessRate,
           },
@@ -1116,10 +1550,14 @@ router.get(
           dailyVolume,
 
           attention: {
-            mismatches: mismatchCount,
+            mismatches:
+              mismatchCount,
+
             lowConfidence:
               lowConfidenceDocuments,
+
             overdueApprovals,
+
             highSeverityExceptions:
               openHighSeverityExceptions,
           },
@@ -1137,80 +1575,148 @@ router.get(
 
 router.get(
   "/reports",
-  (_req, res) => {
-    const invoiceSummary =
-      db.prepare(`
-        SELECT
-          currency,
-          COUNT(*) AS invoiceCount,
-          COALESCE(
-            SUM(total_amount),
-            0
-          ) AS totalValue,
-          COALESCE(
-            AVG(
-              extraction_confidence
-            ),
-            0
-          ) AS averageConfidence
-        FROM invoices
-        GROUP BY currency
-      `).all();
+  (req, res, next) => {
+    try {
+      const organisationId =
+        req.organisation.id;
 
-    const matchSummary =
-      db.prepare(`
-        SELECT
-          match_status AS matchStatus,
-          COUNT(*) AS count,
-          COALESCE(
-            AVG(match_score),
-            0
-          ) AS averageScore
-        FROM invoice_matches
-        GROUP BY match_status
-      `).all();
+      const invoiceSummary =
+        db.prepare(`
+          SELECT
+            i.currency,
 
-    const exceptionSummary =
-      db.prepare(`
-        SELECT
-          exception_type AS exceptionType,
-          status,
-          COUNT(*) AS count
-        FROM exceptions
-        GROUP BY
-          exception_type,
-          status
-        ORDER BY count DESC
-      `).all();
+            COUNT(*) AS invoiceCount,
 
-    const automationSummary =
-      db.prepare(`
-        SELECT
-          status,
-          COUNT(*) AS runCount,
-          COALESCE(
-            SUM(items_processed),
-            0
-          ) AS itemsProcessed,
-          COALESCE(
-            SUM(items_succeeded),
-            0
-          ) AS itemsSucceeded,
-          COALESCE(
-            SUM(items_failed),
-            0
-          ) AS itemsFailed
-        FROM automation_runs
-        GROUP BY status
-      `).all();
+            COALESCE(
+              SUM(i.total_amount),
+              0
+            ) AS totalValue,
 
-    res.json({
-      success: true,
-      invoiceSummary,
-      matchSummary,
-      exceptionSummary,
-      automationSummary,
-    });
+            COALESCE(
+              AVG(
+                i.extraction_confidence
+              ),
+              0
+            ) AS averageConfidence
+
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+          GROUP BY
+            i.currency
+        `).all(
+          organisationId
+        );
+
+      const matchSummary =
+        db.prepare(`
+          SELECT
+            im.match_status
+              AS matchStatus,
+
+            COUNT(*) AS count,
+
+            COALESCE(
+              AVG(im.match_score),
+              0
+            ) AS averageScore
+
+          FROM invoice_matches im
+
+          INNER JOIN invoices i
+            ON i.id = im.invoice_id
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+          GROUP BY
+            im.match_status
+        `).all(
+          organisationId
+        );
+
+      const exceptionSummary =
+        db.prepare(`
+          SELECT
+            e.exception_type
+              AS exceptionType,
+
+            e.status,
+
+            COUNT(*) AS count
+
+          FROM exceptions e
+
+          INNER JOIN invoices i
+            ON i.id = e.invoice_id
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            d.organisation_id = ?
+
+          GROUP BY
+            e.exception_type,
+            e.status
+
+          ORDER BY
+            count DESC
+        `).all(
+          organisationId
+        );
+
+      const automationSummary =
+        db.prepare(`
+          SELECT
+            status,
+
+            COUNT(*) AS runCount,
+
+            COALESCE(
+              SUM(items_processed),
+              0
+            ) AS itemsProcessed,
+
+            COALESCE(
+              SUM(items_succeeded),
+              0
+            ) AS itemsSucceeded,
+
+            COALESCE(
+              SUM(items_failed),
+              0
+            ) AS itemsFailed
+
+          FROM automation_runs
+
+          WHERE
+            organisation_id = ?
+
+          GROUP BY
+            status
+        `).all(
+          organisationId
+        );
+
+      res.json({
+        success: true,
+        invoiceSummary,
+        matchSummary,
+        exceptionSummary,
+        automationSummary,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
@@ -1239,111 +1745,202 @@ const DEFAULT_WORKFLOW_SETTINGS = [
   },
 ];
 
-function ensureWorkflowSettings() {
-  const insertSetting = db.prepare(`
-    INSERT OR IGNORE INTO app_settings (
-      setting_key,
-      setting_value,
-      description,
-      updated_at
-    )
-    VALUES (?, ?, ?, ?)
-  `);
+function ensureWorkflowSettings(
+  organisationId
+) {
+  if (!organisationId) {
+    throw new Error(
+      "organisationId is required for workflow settings."
+    );
+  }
 
-  const now = new Date().toISOString();
+  const findSetting =
+    db.prepare(`
+      SELECT
+        setting_key,
+        organisation_id
+      FROM app_settings
+      WHERE setting_key = ?
+    `);
 
-  const transaction = db.transaction(() => {
-    for (const setting of DEFAULT_WORKFLOW_SETTINGS) {
-      insertSetting.run(
-        setting.key,
-        setting.value,
-        setting.description,
-        now
-      );
-    }
-  });
+  const insertSetting =
+    db.prepare(`
+      INSERT INTO app_settings (
+        setting_key,
+        setting_value,
+        description,
+        updated_at,
+        organisation_id
+      )
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+  const now =
+    new Date().toISOString();
+
+  const transaction =
+    db.transaction(() => {
+      for (
+        const setting
+        of DEFAULT_WORKFLOW_SETTINGS
+      ) {
+        const existing =
+          findSetting.get(
+            setting.key
+          );
+
+        if (existing) {
+          if (
+            existing.organisation_id !==
+            organisationId
+          ) {
+            const error =
+              new Error(
+                `Workflow setting ${setting.key} belongs to another organisation. Per-organisation settings require the composite-key migration.`
+              );
+
+            error.status = 409;
+            error.code =
+              "SETTING_SCHEMA_MIGRATION_REQUIRED";
+
+            throw error;
+          }
+
+          continue;
+        }
+
+        insertSetting.run(
+          setting.key,
+          setting.value,
+          setting.description,
+          now,
+          organisationId
+        );
+      }
+    });
 
   transaction();
 }
 
-ensureWorkflowSettings();
-
 router.get(
   "/settings",
-  (_req, res) => {
-    const settings =
-      db.prepare(`
-        SELECT
-          setting_key AS key,
-          setting_value AS value,
-          description,
-          updated_at AS updatedAt
-        FROM app_settings
-        ORDER BY setting_key
-      `).all();
+  (req, res, next) => {
+    try {
+      const organisationId =
+        req.organisation.id;
 
-    res.json({
-      success: true,
-      settings,
-    });
+      ensureWorkflowSettings(
+        organisationId
+      );
+
+      const settings =
+        db.prepare(`
+          SELECT
+            setting_key AS key,
+            setting_value AS value,
+            description,
+            updated_at AS updatedAt
+          FROM app_settings
+          WHERE organisation_id = ?
+          ORDER BY setting_key
+        `).all(
+          organisationId
+        );
+
+      res.json({
+        success: true,
+        settings,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
 router.put(
   "/settings/:key",
-  (req, res) => {
-    const value =
-      String(
-        req.body?.value ?? ""
-      ).trim();
+  (req, res, next) => {
+    try {
+      const organisationId =
+        req.organisation.id;
 
-    if (!value) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Setting value is required.",
+      ensureWorkflowSettings(
+        organisationId
+      );
+
+      const value =
+        String(
+          req.body?.value ?? ""
+        ).trim();
+
+      if (!value) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Setting value is required.",
+        });
+      }
+
+      const setting =
+        db.prepare(`
+          SELECT *
+          FROM app_settings
+          WHERE
+            setting_key = ?
+            AND organisation_id = ?
+        `).get(
+          req.params.key,
+          organisationId
+        );
+
+      if (!setting) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Setting not found.",
+        });
+      }
+
+      const update =
+        db.prepare(`
+          UPDATE app_settings
+          SET
+            setting_value = ?,
+            updated_at = ?
+          WHERE
+            setting_key = ?
+            AND organisation_id = ?
+        `).run(
+          value,
+          new Date().toISOString(),
+          req.params.key,
+          organisationId
+        );
+
+      if (update.changes !== 1) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Setting not found.",
+        });
+      }
+
+      createAudit(
+        organisationId,
+        "SETTING_UPDATED",
+        "setting",
+        req.params.key,
+        `${req.params.key} changed from ${setting.setting_value} to ${value}`
+      );
+
+      res.json({
+        success: true,
+        key: req.params.key,
+        value,
       });
+    } catch (error) {
+      next(error);
     }
-
-    const setting =
-      db.prepare(`
-        SELECT *
-        FROM app_settings
-        WHERE setting_key = ?
-      `).get(req.params.key);
-
-    if (!setting) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "Setting not found.",
-      });
-    }
-
-    db.prepare(`
-      UPDATE app_settings
-      SET
-        setting_value = ?,
-        updated_at = ?
-      WHERE setting_key = ?
-    `).run(
-      value,
-      new Date().toISOString(),
-      req.params.key
-    );
-
-    createAudit(
-      "SETTING_UPDATED",
-      "setting",
-      req.params.key,
-      `${req.params.key} changed from ${setting.setting_value} to ${value}`
-    );
-
-    res.json({
-      success: true,
-      key: req.params.key,
-      value,
-    });
   }
 );
 
@@ -1356,102 +1953,142 @@ router.put(
 
 router.get(
   "/rpa/work-items",
-  (_req, res) => {
-    const workItems =
-      db.prepare(`
-        SELECT
-          i.id AS invoiceId,
-          i.invoice_number AS invoiceNumber,
-          i.supplier_name AS supplierName,
-          i.purchase_order_number AS purchaseOrderNumber,
-          i.currency,
-          i.total_amount AS totalAmount,
-          i.extraction_confidence AS extractionConfidence,
-          i.validation_status AS validationStatus,
+  (req, res, next) => {
+    try {
+      const organisationId =
+        req.organisation.id;
 
-          COALESCE(
-            m.match_status,
-            'Not Processed'
-          ) AS matchStatus
+      const workItems =
+        db.prepare(`
+          SELECT
+            i.id AS invoiceId,
+            i.invoice_number AS invoiceNumber,
+            i.supplier_name AS supplierName,
+            i.purchase_order_number AS purchaseOrderNumber,
+            i.currency,
+            i.total_amount AS totalAmount,
+            i.extraction_confidence AS extractionConfidence,
+            i.validation_status AS validationStatus,
 
-        FROM invoices i
+            COALESCE(
+              m.match_status,
+              'Not Processed'
+            ) AS matchStatus
 
-        LEFT JOIN invoice_matches m
-          ON m.invoice_id = i.id
+          FROM invoices i
 
-        WHERE
-          i.validation_status =
-            'Validated'
-          AND (
-            m.id IS NULL
-            OR m.match_status <>
-              'Matched'
-          )
+          INNER JOIN documents d
+            ON d.id = i.document_id
 
-        ORDER BY i.created_at
-      `).all();
+          LEFT JOIN invoice_matches m
+            ON m.invoice_id = i.id
 
-    res.json({
-      success: true,
-      queue:
-        "APPA-INVOICE-MATCHING",
-      workItems,
-    });
+          WHERE
+            d.organisation_id = ?
+
+            AND i.validation_status =
+              'Validated'
+
+            AND (
+              m.id IS NULL
+              OR m.match_status <>
+                'Matched'
+            )
+
+          ORDER BY
+            i.created_at
+        `).all(
+          organisationId
+        );
+
+      res.json({
+        success: true,
+        queue:
+          "APPA-INVOICE-MATCHING",
+        workItems,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
 router.post(
   "/rpa/results",
-  (req, res) => {
-    const {
-      invoiceId,
-      robotName =
-        "UiPath Robot",
-      status,
-      message = "",
-    } = req.body || {};
+  (req, res, next) => {
+    try {
+      const organisationId =
+        req.organisation.id;
 
-    if (
-      !invoiceId ||
-      !status
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "invoiceId and status are required.",
+      const {
+        invoiceId,
+        robotName =
+          "UiPath Robot",
+        status,
+        message = "",
+      } = req.body || {};
+
+      if (
+        !invoiceId ||
+        !status
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "invoiceId and status are required.",
+        });
+      }
+
+      const invoice =
+        db.prepare(`
+          SELECT
+            i.id,
+            i.invoice_number AS invoiceNumber
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id = i.document_id
+
+          WHERE
+            i.id = ?
+            AND d.organisation_id = ?
+        `).get(
+          invoiceId,
+          organisationId
+        );
+
+      if (!invoice) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Invoice not found.",
+        });
+      }
+
+      createAudit(
+        organisationId,
+        "RPA_RESULT_RECEIVED",
+        "invoice",
+        invoiceId,
+        `${robotName}: ${status}${
+          message
+            ? ` - ${message}`
+            : ""
+        }`
+      );
+
+      res.json({
+        success: true,
+        received: {
+          invoiceId,
+          robotName,
+          status,
+          message,
+        },
       });
+    } catch (error) {
+      next(error);
     }
-
-    const invoice =
-      db.prepare(`
-        SELECT id
-        FROM invoices
-        WHERE id = ?
-      `).get(invoiceId);
-
-    if (!invoice) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "Invoice not found.",
-      });
-    }
-
-    createAudit(
-      "RPA_RESULT_RECEIVED",
-      "invoice",
-      invoiceId,
-      `${robotName}: ${status}${
-        message
-          ? ` — ${message}`
-          : ""
-      }`
-    );
-
-    res.json({
-      success: true,
-      received: true,
-    });
   }
 );
 
@@ -1463,7 +2100,7 @@ router.post(
   "/seed",
   (_req, res) => {
     const result =
-      seedEnterpriseData();
+      seedEnterpriseData(req.organisation.id);
 
     res.json({
       success: true,
@@ -1480,100 +2117,48 @@ router.post(
 
 /* APPA SYNTHETIC WORKFLOW SCENARIOS */
 
+/*
+ * scenarioService still contains global development/test
+ * data operations. Until that service is organisation-aware,
+ * these routes must not invoke it.
+ */
+
+function scenarioTenantMigrationRequired(
+  _req,
+  res
+) {
+  return res.status(503).json({
+    success: false,
+    code:
+      "SCENARIO_TENANT_MIGRATION_REQUIRED",
+    message:
+      "Synthetic scenario operations are temporarily unavailable while organisation isolation is being completed.",
+  });
+}
+
 router.post(
   "/scenarios/run",
-  async (_req, res, next) => {
-    try {
-      const result =
-        await runScenarios();
-
-      res.json({
-        success:
-          result.summary.allPassed,
-        message:
-          result.summary.allPassed
-            ? "All synthetic AP workflow scenarios passed."
-            : "One or more synthetic AP workflow scenarios failed.",
-        ...result,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  scenarioTenantMigrationRequired
 );
 
 router.post(
   "/scenarios/seed",
-  (_req, res, next) => {
-    try {
-      const result = seedScenarios();
-
-      res.status(201).json({
-        success: true,
-        message:
-          "Synthetic AP workflow scenarios prepared.",
-        result,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  scenarioTenantMigrationRequired
 );
 
 router.get(
   "/scenarios",
-  (_req, res, next) => {
-    try {
-      res.json({
-        success: true,
-        scenarios:
-          getScenarioInvoices(),
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  scenarioTenantMigrationRequired
 );
 
 router.get(
   "/scenarios/results",
-  (_req, res, next) => {
-    try {
-      const results =
-        getScenarioResults();
-
-      res.json({
-        success: true,
-        total: results.length,
-        passed:
-          results.filter(
-            (item) => item.passed
-          ).length,
-        results,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  scenarioTenantMigrationRequired
 );
 
 router.delete(
   "/scenarios",
-  (_req, res, next) => {
-    try {
-      const result =
-        removeScenarioData();
-
-      res.json({
-        success: true,
-        message:
-          "Synthetic scenario data removed.",
-        result,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  scenarioTenantMigrationRequired
 );
 
 module.exports = router;

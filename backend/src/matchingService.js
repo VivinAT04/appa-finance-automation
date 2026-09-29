@@ -18,17 +18,30 @@ function almostEqual(a, b, tolerance = 1) {
   );
 }
 
-function getSetting(key, fallback) {
+function getSetting(
+  key,
+  fallback,
+  organisationId
+) {
+  if (!organisationId) {
+    return fallback;
+  }
+
   const row = db.prepare(`
     SELECT setting_value
     FROM app_settings
     WHERE setting_key = ?
-  `).get(key);
+      AND organisation_id = ?
+  `).get(
+    key,
+    organisationId
+  );
 
   return row?.setting_value ?? fallback;
 }
 
 function createAudit(
+  organisationId,
   action,
   entityType,
   entityId,
@@ -41,25 +54,33 @@ function createAudit(
       entity_type,
       entity_id,
       description,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     randomUUID(),
     action,
     entityType,
     entityId,
     description,
-    new Date().toISOString()
+    new Date().toISOString(),
+    organisationId
   );
 }
 
-function getInvoice(invoiceId) {
+function getInvoice(invoiceId, organisationId) {
   return db.prepare(`
-    SELECT *
-    FROM invoices
-    WHERE id = ?
-  `).get(invoiceId);
+    SELECT i.*
+    FROM invoices i
+    INNER JOIN documents d
+      ON d.id = i.document_id
+    WHERE i.id = ?
+      AND d.organisation_id = ?
+  `).get(
+    invoiceId,
+    organisationId
+  );
 }
 
 function getInvoiceItems(invoiceId) {
@@ -71,17 +92,23 @@ function getInvoiceItems(invoiceId) {
   `).all(invoiceId);
 }
 
-function getPurchaseOrder(poNumber) {
+function getPurchaseOrder(
+  poNumber,
+  organisationId
+) {
+  if (!organisationId) {
+    return null;
+  }
+
   return db.prepare(`
-    SELECT
-      po.*,
-      s.name AS supplier_name,
-      s.supplier_code
-    FROM purchase_orders po
-    JOIN suppliers s
-      ON s.id = po.supplier_id
-    WHERE po.po_number = ?
-  `).get(poNumber);
+    SELECT *
+    FROM purchase_orders
+    WHERE po_number = ?
+      AND organisation_id = ?
+  `).get(
+    poNumber,
+    organisationId
+  );
 }
 
 function getPurchaseOrderItems(poId) {
@@ -178,6 +205,8 @@ function createException(
   );
 
   createAudit(
+    organisationId,
+
     "EXCEPTION_CREATED",
     "exception",
     id,
@@ -213,6 +242,8 @@ function resolveSystemExceptions(invoiceId) {
 
   for (const item of open) {
     createAudit(
+      organisationId,
+
       "EXCEPTION_AUTO_RESOLVED",
       "exception",
       item.id,
@@ -229,29 +260,41 @@ function removeAutomaticApprovals(invoiceId) {
   `).run(invoiceId);
 }
 
-function duplicateExists(invoice) {
+function duplicateExists(
+  invoice,
+  organisationId
+) {
+  if (!organisationId) {
+    return false;
+  }
+
   if (
     getSetting(
       "duplicate_detection",
-      "true"
+      "true",
+      organisationId
     ) !== "true"
   ) {
     return false;
   }
 
   const duplicate = db.prepare(`
-    SELECT id
-    FROM invoices
-    WHERE id <> ?
-      AND invoice_number = ?
-      AND supplier_name = ?
-      AND total_amount = ?
+    SELECT i.id
+    FROM invoices i
+    INNER JOIN documents d
+      ON d.id = i.document_id
+    WHERE i.id <> ?
+      AND i.invoice_number = ?
+      AND i.supplier_name = ?
+      AND i.total_amount = ?
+      AND d.organisation_id = ?
     LIMIT 1
   `).get(
     invoice.id,
     invoice.invoice_number,
     invoice.supplier_name,
-    invoice.total_amount
+    invoice.total_amount,
+    organisationId
   );
 
   return Boolean(duplicate);
@@ -359,37 +402,42 @@ function upsertMatch({
   return id;
 }
 
-function getMatch(invoiceId) {
-  return db.prepare(`
+function getMatch(
+  invoiceId,
+  organisationId
+) {
+  if (!organisationId) {
+    return null;
+  }
+
+  const match = db.prepare(`
     SELECT
-      m.id,
-      m.invoice_id AS invoiceId,
-      m.purchase_order_id AS purchaseOrderId,
-      po.po_number AS purchaseOrderNumber,
+      im.id,
+      im.invoice_id AS invoiceId,
+      im.purchase_order_id AS purchaseOrderId,
+      im.match_score AS matchScore,
+      im.match_status AS matchStatus,
+      im.variance_amount AS varianceAmount,
+      im.details,
+      im.created_at AS createdAt,
+      im.updated_at AS updatedAt
+    FROM invoice_matches im
 
-      m.supplier_match AS supplierMatch,
-      m.po_reference_match AS poReferenceMatch,
-      m.currency_match AS currencyMatch,
-      m.subtotal_match AS subtotalMatch,
-      m.tax_match AS taxMatch,
-      m.total_match AS totalMatch,
-      m.line_items_match AS lineItemsMatch,
+    INNER JOIN invoices i
+      ON i.id = im.invoice_id
 
-      m.match_score AS matchScore,
-      m.match_status AS matchStatus,
-      m.variance_amount AS varianceAmount,
-      m.details,
+    INNER JOIN documents d
+      ON d.id = i.document_id
 
-      m.created_at AS createdAt,
-      m.updated_at AS updatedAt
+    WHERE
+      im.invoice_id = ?
+      AND d.organisation_id = ?
+  `).get(
+    invoiceId,
+    organisationId
+  );
 
-    FROM invoice_matches m
-
-    LEFT JOIN purchase_orders po
-      ON po.id = m.purchase_order_id
-
-    WHERE m.invoice_id = ?
-  `).get(invoiceId);
+  return match || null;
 }
 
 function saveExceptionMatch(
@@ -418,6 +466,8 @@ function saveExceptionMatch(
   });
 
   createAudit(
+    organisationId,
+
     "INVOICE_MATCH_EXCEPTION",
     "invoice",
     invoice.id,
@@ -425,17 +475,30 @@ function saveExceptionMatch(
   );
 
   createAudit(
+    organisationId,
+
     "PO_MATCH_COMPLETED",
     "invoice_match",
     matchId,
     `${invoice.invoice_number}: Exception (0%)`
   );
 
-  return getMatch(invoice.id);
+  return getMatch(
+    invoice.id,
+    organisationId
+  );
 }
 
-function matchInvoice(invoiceId) {
-  const invoice = getInvoice(invoiceId);
+function matchInvoice(
+  invoiceId,
+  organisationId
+) {
+  if (!organisationId) {
+    throw new Error(
+      "Organisation context is required."
+    );
+  }
+  const invoice = getInvoice(invoiceId, organisationId);
 
   if (!invoice) {
     throw new Error("Invoice not found.");
@@ -444,7 +507,7 @@ function matchInvoice(invoiceId) {
   removeAutomaticApprovals(invoice.id);
 
   const duplicate =
-    duplicateExists(invoice);
+    duplicateExists(invoice, organisationId);
 
   if (duplicate) {
     createException(
@@ -490,9 +553,9 @@ function matchInvoice(invoiceId) {
   }
 
   const tolerance = Number(
-    getSetting(
-      "amount_tolerance",
-      "1.00"
+    getSetting("amount_tolerance",
+      "1.00",
+      organisationId
     )
   );
 
@@ -649,9 +712,9 @@ function matchInvoice(invoiceId) {
   }
 
   const threshold = Number(
-    getSetting(
-      "auto_approval_match_score",
-      "100"
+    getSetting("auto_approval_match_score",
+      "100",
+      organisationId
     )
   );
 
@@ -720,6 +783,8 @@ function matchInvoice(invoiceId) {
     );
 
     createAudit(
+      organisationId,
+
       "INVOICE_AUTO_APPROVED",
       "invoice",
       invoice.id,
@@ -727,6 +792,8 @@ function matchInvoice(invoiceId) {
     );
   } else {
     createAudit(
+      organisationId,
+
       "INVOICE_MATCH_EXCEPTION",
       "invoice",
       invoice.id,
@@ -735,13 +802,18 @@ function matchInvoice(invoiceId) {
   }
 
   createAudit(
+    organisationId,
+
     "PO_MATCH_COMPLETED",
     "invoice_match",
     matchId,
     `${invoice.invoice_number}: ${status} (${score}%)`
   );
 
-  return getMatch(invoice.id);
+  return getMatch(
+    invoice.id,
+    organisationId
+  );
 }
 
 module.exports = {

@@ -312,6 +312,7 @@ async function extractText(document) {
 }
 
 function createAudit(
+  organisationId,
   action,
   entityType,
   entityId,
@@ -324,25 +325,40 @@ function createAudit(
       entity_type,
       entity_id,
       description,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     randomUUID(),
     action,
     entityType,
     entityId,
     description,
-    new Date().toISOString()
+    new Date().toISOString(),
+    organisationId
   );
 }
 
-async function processInvoiceDocument(documentId) {
+async function processInvoiceDocument(
+  documentId,
+  organisationId
+) {
+  if (!organisationId) {
+    throw new Error(
+      "Organisation context is required."
+    );
+  }
+
   const document = db.prepare(`
     SELECT *
     FROM documents
     WHERE id = ?
-  `).get(documentId);
+      AND organisation_id = ?
+  `).get(
+    documentId,
+    organisationId
+  );
 
   if (!document) {
     throw new Error("Document not found.");
@@ -363,10 +379,12 @@ async function processInvoiceDocument(documentId) {
       status = ?,
       extraction_status = ?
     WHERE id = ?
+      AND organisation_id = ?
   `).run(
     "Processing",
     "Processing",
-    documentId
+    documentId,
+    organisationId
   );
 
   try {
@@ -382,10 +400,16 @@ async function processInvoiceDocument(documentId) {
     const now = new Date().toISOString();
 
     const existing = db.prepare(`
-      SELECT id
-      FROM invoices
-      WHERE document_id = ?
-    `).get(documentId);
+      SELECT i.id
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE i.document_id = ?
+        AND d.organisation_id = ?
+    `).get(
+      documentId,
+      organisationId
+    );
 
     const invoiceId = existing?.id || randomUUID();
 
@@ -410,6 +434,11 @@ async function processInvoiceDocument(documentId) {
             validation_message = ?,
             updated_at = ?
           WHERE id = ?
+            AND document_id IN (
+              SELECT id
+              FROM documents
+              WHERE organisation_id = ?
+            )
         `).run(
           invoice.invoiceNumber,
           invoice.invoiceDate,
@@ -426,13 +455,24 @@ async function processInvoiceDocument(documentId) {
           invoice.validationStatus,
           invoice.validationMessage,
           now,
-          invoiceId
+          invoiceId,
+          organisationId
         );
 
         db.prepare(`
           DELETE FROM invoice_line_items
           WHERE invoice_id = ?
-        `).run(invoiceId);
+            AND invoice_id IN (
+              SELECT i.id
+              FROM invoices i
+              INNER JOIN documents d
+                ON d.id = i.document_id
+              WHERE d.organisation_id = ?
+            )
+        `).run(
+          invoiceId,
+          organisationId
+        );
       } else {
         db.prepare(`
           INSERT INTO invoices (
@@ -516,18 +556,21 @@ async function processInvoiceDocument(documentId) {
           status = ?,
           extraction_status = ?
         WHERE id = ?
+          AND organisation_id = ?
       `).run(
         invoice.validationStatus === "Exception"
           ? "Needs Review"
           : "Processed",
         "Completed",
-        documentId
+        documentId,
+        organisationId
       );
     });
 
     transaction();
 
     createAudit(
+      organisationId,
       "INVOICE_EXTRACTED",
       "invoice",
       invoiceId,
@@ -535,6 +578,7 @@ async function processInvoiceDocument(documentId) {
     );
 
     createAudit(
+      organisationId,
       invoice.validationStatus === "Validated"
         ? "INVOICE_VALIDATED"
         : "INVOICE_EXCEPTION",
@@ -543,7 +587,10 @@ async function processInvoiceDocument(documentId) {
       invoice.validationMessage
     );
 
-    return getInvoiceById(invoiceId);
+    return getInvoiceById(
+      invoiceId,
+      organisationId
+    );
   } catch (error) {
     db.prepare(`
       UPDATE documents
@@ -551,13 +598,16 @@ async function processInvoiceDocument(documentId) {
         status = ?,
         extraction_status = ?
       WHERE id = ?
+        AND organisation_id = ?
     `).run(
       "Needs Review",
       "Failed",
-      documentId
+      documentId,
+      organisationId
     );
 
     createAudit(
+      organisationId,
       "INVOICE_EXTRACTION_FAILED",
       "document",
       documentId,
@@ -568,7 +618,14 @@ async function processInvoiceDocument(documentId) {
   }
 }
 
-function getInvoiceById(invoiceId) {
+function getInvoiceById(
+  invoiceId,
+  organisationId
+) {
+  if (!organisationId) {
+    return null;
+  }
+
   const invoice = db.prepare(`
     SELECT
       i.id,
@@ -600,10 +657,14 @@ function getInvoiceById(invoiceId) {
       d.status AS documentStatus,
       d.extraction_status AS extractionStatus
     FROM invoices i
-    JOIN documents d
+    INNER JOIN documents d
       ON d.id = i.document_id
     WHERE i.id = ?
-  `).get(invoiceId);
+      AND d.organisation_id = ?
+  `).get(
+    invoiceId,
+    organisationId
+  );
 
   if (!invoice) {
     return null;
@@ -611,40 +672,76 @@ function getInvoiceById(invoiceId) {
 
   invoice.lineItems = db.prepare(`
     SELECT
-      id,
-      description,
-      quantity,
-      unit_price AS unitPrice,
-      tax_rate AS taxRate,
-      line_total AS lineTotal,
-      position
-    FROM invoice_line_items
-    WHERE invoice_id = ?
-    ORDER BY position ASC
-  `).all(invoiceId);
+      li.id,
+      li.description,
+      li.quantity,
+      li.unit_price AS unitPrice,
+      li.tax_rate AS taxRate,
+      li.line_total AS lineTotal,
+      li.position
+    FROM invoice_line_items li
+    INNER JOIN invoices i
+      ON i.id = li.invoice_id
+    INNER JOIN documents d
+      ON d.id = i.document_id
+    WHERE li.invoice_id = ?
+      AND d.organisation_id = ?
+    ORDER BY li.position ASC
+  `).all(
+    invoiceId,
+    organisationId
+  );
 
   return invoice;
 }
 
-function getInvoiceByDocumentId(documentId) {
-  const row = db.prepare(`
-    SELECT id
-    FROM invoices
-    WHERE document_id = ?
-  `).get(documentId);
+function getInvoiceByDocumentId(
+  documentId,
+  organisationId
+) {
+  if (!organisationId) {
+    return null;
+  }
 
-  return row ? getInvoiceById(row.id) : null;
+  const row = db.prepare(`
+    SELECT i.id
+    FROM invoices i
+    INNER JOIN documents d
+      ON d.id = i.document_id
+    WHERE i.document_id = ?
+      AND d.organisation_id = ?
+  `).get(
+    documentId,
+    organisationId
+  );
+
+  return row
+    ? getInvoiceById(
+        row.id,
+        organisationId
+      )
+    : null;
 }
 
-function listInvoices() {
+function listInvoices(organisationId) {
+  if (!organisationId) {
+    return [];
+  }
+
   const rows = db.prepare(`
-    SELECT id
-    FROM invoices
-    ORDER BY created_at DESC
-  `).all();
+    SELECT i.id
+    FROM invoices i
+    INNER JOIN documents d
+      ON d.id = i.document_id
+    WHERE d.organisation_id = ?
+    ORDER BY i.created_at DESC
+  `).all(organisationId);
 
   return rows.map((row) =>
-    getInvoiceById(row.id)
+    getInvoiceById(
+      row.id,
+      organisationId
+    )
   );
 }
 

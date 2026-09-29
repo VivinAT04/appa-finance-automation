@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const db = require("./database");
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -10,6 +11,27 @@ function getJwtSecret() {
   }
 
   return secret;
+}
+
+function getCurrentUser(userId) {
+  if (!userId) {
+    return null;
+  }
+
+  return db.prepare(`
+    SELECT
+      id,
+      email,
+      full_name,
+      role,
+      status,
+      last_login_at,
+      created_at,
+      updated_at
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+  `).get(userId);
 }
 
 function requireAuth(req, res, next) {
@@ -34,14 +56,33 @@ function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, getJwtSecret(), {
       algorithms: ["HS256"],
+      issuer: "appa-finance",
+      audience: "appa-finance-web",
     });
 
+    const user = getCurrentUser(payload.sub);
+
+    if (!user || user.status !== "Active") {
+      return res.status(401).json({
+        success: false,
+        message: "User account is unavailable.",
+      });
+    }
+
+    /*
+     * IMPORTANT:
+     * The database is the source of truth for mutable account data.
+     * We deliberately do not trust role/status/name from an older JWT.
+     */
     req.user = {
-      id: payload.sub,
-      email: payload.email,
-      fullName: payload.fullName,
-      role: payload.role,
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      role: user.role,
+      status: user.status,
     };
+
+    req.authUser = user;
 
     return next();
   } catch (_error) {
@@ -55,4 +96,5 @@ function requireAuth(req, res, next) {
 module.exports = {
   requireAuth,
   getJwtSecret,
+  getCurrentUser,
 };

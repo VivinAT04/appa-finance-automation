@@ -247,8 +247,6 @@ db.exec(`
     ON exceptions(invoice_id);
 `);
 
-module.exports = db;
-
 /* =========================================================
    APPA AUTHENTICATION
    ========================================================= */
@@ -291,3 +289,51 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_password_reset_hash
     ON password_reset_tokens(token_hash);
 `);
+
+/* =========================================================
+   APPA ORGANISATIONS / WORKSPACES
+   ========================================================= */
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS organisations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS organisation_memberships (
+    id TEXT PRIMARY KEY,
+    organisation_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+
+    FOREIGN KEY (organisation_id)
+      REFERENCES organisations(id)
+      ON DELETE CASCADE,
+
+    FOREIGN KEY (user_id)
+      REFERENCES users(id)
+      ON DELETE CASCADE,
+
+    UNIQUE (organisation_id, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_org_memberships_user
+    ON organisation_memberships(user_id);
+
+  CREATE INDEX IF NOT EXISTS idx_org_memberships_org
+    ON organisation_memberships(organisation_id);
+`);
+
+const {
+  runOrganisationMigration,
+} = require("./organisationMigration");
+
+runOrganisationMigration(db);
+
+module.exports = db;

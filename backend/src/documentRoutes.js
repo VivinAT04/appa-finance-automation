@@ -20,20 +20,26 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
 
   filename: (_req, file, cb) => {
-    const extension = path.extname(file.originalname).toLowerCase();
+    const extension =
+      path.extname(file.originalname).toLowerCase();
+
     cb(null, `${randomUUID()}${extension}`);
   },
 });
 
 const upload = multer({
   storage,
+
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
+
   fileFilter: (_req, file, cb) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
       return cb(
-        new Error("Only PDF, PNG and JPG documents are supported.")
+        new Error(
+          "Only PDF, PNG and JPG documents are supported."
+        )
       );
     }
 
@@ -41,7 +47,13 @@ const upload = multer({
   },
 });
 
-function createAudit(action, entityType, entityId, description) {
+function createAudit(
+  organisationId,
+  action,
+  entityType,
+  entityId,
+  description
+) {
   db.prepare(`
     INSERT INTO audit_logs (
       id,
@@ -49,20 +61,24 @@ function createAudit(action, entityType, entityId, description) {
       entity_type,
       entity_id,
       description,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     randomUUID(),
     action,
     entityType,
     entityId,
     description,
-    new Date().toISOString()
+    new Date().toISOString(),
+    organisationId
   );
 }
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const organisationId = req.organisation.id;
+
   const documents = db.prepare(`
     SELECT
       id,
@@ -75,8 +91,9 @@ router.get("/", (_req, res) => {
       uploaded_by AS uploadedBy,
       created_at AS createdAt
     FROM documents
+    WHERE organisation_id = ?
     ORDER BY created_at DESC
-  `).all();
+  `).all(organisationId);
 
   res.json({
     success: true,
@@ -85,6 +102,8 @@ router.get("/", (_req, res) => {
 });
 
 router.get("/:id", (req, res) => {
+  const organisationId = req.organisation.id;
+
   const document = db.prepare(`
     SELECT
       id,
@@ -99,7 +118,11 @@ router.get("/:id", (req, res) => {
       created_at AS createdAt
     FROM documents
     WHERE id = ?
-  `).get(req.params.id);
+      AND organisation_id = ?
+  `).get(
+    req.params.id,
+    organisationId
+  );
 
   if (!document) {
     return res.status(404).json({
@@ -115,11 +138,19 @@ router.get("/:id", (req, res) => {
 });
 
 router.get("/:id/file", (req, res) => {
+  const organisationId = req.organisation.id;
+
   const document = db.prepare(`
-    SELECT original_name, stored_name
+    SELECT
+      original_name,
+      stored_name
     FROM documents
     WHERE id = ?
-  `).get(req.params.id);
+      AND organisation_id = ?
+  `).get(
+    req.params.id,
+    organisationId
+  );
 
   if (!document) {
     return res.status(404).json({
@@ -128,7 +159,10 @@ router.get("/:id/file", (req, res) => {
     });
   }
 
-  const filePath = path.join(uploadDir, document.stored_name);
+  const filePath = path.join(
+    uploadDir,
+    document.stored_name
+  );
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
@@ -142,15 +176,21 @@ router.get("/:id/file", (req, res) => {
 
 router.post(
   "/upload",
-  (req, res, next) => {
-    upload.single("document")(req, res, (error) => {
-      if (error) {
-        return next(error);
-      }
 
-      next();
-    });
+  (req, res, next) => {
+    upload.single("document")(
+      req,
+      res,
+      (error) => {
+        if (error) {
+          return next(error);
+        }
+
+        next();
+      }
+    );
   },
+
   (req, res) => {
     if (!req.file) {
       return res.status(400).json({
@@ -158,6 +198,9 @@ router.post(
         message: "Choose a document to upload.",
       });
     }
+
+    const organisationId =
+      req.organisation.id;
 
     const id = randomUUID();
     const now = new Date().toISOString();
@@ -167,7 +210,13 @@ router.post(
         ? req.body.documentType.trim()
         : "";
 
-    const documentType = requestedType || "Unclassified";
+    const documentType =
+      requestedType || "Unclassified";
+
+    const uploadedBy =
+      req.user?.fullName ||
+      req.user?.email ||
+      "Authenticated User";
 
     db.prepare(`
       INSERT INTO documents (
@@ -180,9 +229,12 @@ router.post(
         status,
         extraction_status,
         uploaded_by,
-        created_at
+        created_at,
+        organisation_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
     `).run(
       id,
       req.file.originalname,
@@ -192,11 +244,13 @@ router.post(
       documentType,
       "Uploaded",
       "Pending",
-      "Administrator",
-      now
+      uploadedBy,
+      now,
+      organisationId
     );
 
     createAudit(
+      organisationId,
       "DOCUMENT_UPLOADED",
       "document",
       id,
@@ -216,7 +270,11 @@ router.post(
         created_at AS createdAt
       FROM documents
       WHERE id = ?
-    `).get(id);
+        AND organisation_id = ?
+    `).get(
+      id,
+      organisationId
+    );
 
     res.status(201).json({
       success: true,

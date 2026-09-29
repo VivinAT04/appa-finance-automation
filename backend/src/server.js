@@ -12,6 +12,9 @@ const enterpriseRoutes = require("./enterpriseRoutes");
 const authRoutes = require("./authRoutes");
 const userRoutes = require("./userRoutes");
 const { requireAuth } = require("./authMiddleware");
+const {
+  requireOrganisation,
+} = require("./organisationContext");
 const { ensureDevelopmentAdmin } = require("./seedAuthUser");
 
 const app = express();
@@ -46,10 +49,30 @@ app.use(
   userRoutes
 );
 
-app.use("/api/documents", requireAuth, documentRoutes);
-app.use("/api/audit", requireAuth, auditRoutes);
-app.use("/api/invoices", requireAuth, invoiceRoutes);
-app.use("/api/enterprise", requireAuth, enterpriseRoutes);
+app.use(
+  "/api/documents",
+  requireAuth,
+  requireOrganisation,
+  documentRoutes
+);
+app.use(
+  "/api/audit",
+  requireAuth,
+  requireOrganisation,
+  auditRoutes
+);
+app.use(
+  "/api/invoices",
+  requireAuth,
+  requireOrganisation,
+  invoiceRoutes
+);
+app.use(
+  "/api/enterprise",
+  requireAuth,
+  requireOrganisation,
+  enterpriseRoutes
+);
 
 app.use((error, _req, res, _next) => {
   console.error(error);

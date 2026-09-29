@@ -2,12 +2,19 @@ const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const {
+  listUserOrganisations,
+} = require("./organisationContext");
 
 const db = require("./database");
 const {
   requireAuth,
   getJwtSecret,
 } = require("./authMiddleware");
+
+const {
+  listActiveOrganisationsForUser,
+} = require("./organisationContext");
 
 const router = express.Router();
 
@@ -441,24 +448,69 @@ router.post(
   }
 );
 
+router.get(
+  "/organisations",
+  requireAuth,
+  (req, res) => {
+    const organisations =
+      listActiveOrganisationsForUser(
+        req.user.id
+      );
+
+    res.json({
+      success: true,
+      organisations,
+    });
+  }
+);
+
 router.get("/me", requireAuth, (req, res) => {
   const user = db.prepare(`
-    SELECT *
+    SELECT
+      id,
+      email,
+      full_name,
+      role,
+      status,
+      last_login_at,
+      created_at,
+      updated_at
     FROM users
     WHERE id = ?
+      AND status = 'Active'
     LIMIT 1
   `).get(req.user.id);
 
-  if (!user || user.status !== "Active") {
+  if (!user) {
     return res.status(401).json({
       success: false,
       message: "User account is unavailable.",
     });
   }
 
+  const organisations =
+    listActiveOrganisationsForUser(user.id);
+
   return res.json({
     success: true,
-    user: publicUser(user),
+    user: {
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      role: user.role,
+      status: user.status,
+      lastLoginAt: user.last_login_at,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      organisations: organisations.map(
+        (organisation) => ({
+          id: organisation.id,
+          name: organisation.name,
+          code: organisation.code,
+          status: organisation.status,
+        })
+      ),
+    },
   });
 });
 

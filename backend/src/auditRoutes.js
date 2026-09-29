@@ -3,7 +3,10 @@ const db = require("./database");
 
 const router = express.Router();
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const organisationId =
+    req.organisation.id;
+
   const logs = db.prepare(`
     SELECT
       id,
@@ -13,9 +16,10 @@ router.get("/", (_req, res) => {
       description,
       created_at AS createdAt
     FROM audit_logs
+    WHERE organisation_id = ?
     ORDER BY created_at DESC
     LIMIT 100
-  `).all();
+  `).all(organisationId);
 
   res.json({
     success: true,
