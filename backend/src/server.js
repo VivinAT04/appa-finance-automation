@@ -10,6 +10,7 @@ const auditRoutes = require("./auditRoutes");
 const invoiceRoutes = require("./invoiceRoutes");
 const enterpriseRoutes = require("./enterpriseRoutes");
 const authRoutes = require("./authRoutes");
+const userRoutes = require("./userRoutes");
 const { requireAuth } = require("./authMiddleware");
 const { ensureDevelopmentAdmin } = require("./seedAuthUser");
 
@@ -38,6 +39,12 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+
+app.use(
+  "/api/users",
+  requireAuth,
+  userRoutes
+);
 
 app.use("/api/documents", requireAuth, documentRoutes);
 app.use("/api/audit", requireAuth, auditRoutes);

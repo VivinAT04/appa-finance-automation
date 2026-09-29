@@ -412,3 +412,50 @@ export async function getOperationsSummary() {
 
   return response.data.summary;
 }
+
+/* =========================================================
+   APPA USER ADMINISTRATION
+   ========================================================= */
+
+export async function getUsers() {
+  const response = await api.get("/users");
+  return response.data.users;
+}
+
+export async function getUserRoles() {
+  const response = await api.get("/users/roles");
+  return response.data.roles;
+}
+
+export async function createUser(payload) {
+  const response = await api.post(
+    "/users",
+    payload
+  );
+
+  return response.data.user;
+}
+
+export async function updateUser(
+  id,
+  payload
+) {
+  const response = await api.patch(
+    `/users/${id}`,
+    payload
+  );
+
+  return response.data.user;
+}
+
+export async function adminResetUserPassword(
+  id,
+  password
+) {
+  const response = await api.post(
+    `/users/${id}/reset-password`,
+    { password }
+  );
+
+  return response.data;
+}

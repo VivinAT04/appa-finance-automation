@@ -11,6 +11,7 @@ import {
   ScrollText,
   BarChart3,
   Settings,
+  Users,
   Search,
   Bell,
   ChevronDown,
@@ -39,6 +40,8 @@ import EnterpriseModule from "./components/EnterpriseModule";
 import AuditLogs from "./components/AuditLogs";
 import LiveDashboard from "./components/LiveDashboard";
 import Login from "./components/Login";
+import UserManagement from "./components/UserManagement";
+import AccountSecurity from "./components/AccountSecurity";
 import "./App.css";
 
 const baseNavigation = [
@@ -208,23 +211,34 @@ function App() {
       automationStatus: "Idle",
     });
 
-  const navigation = baseNavigation.map((item) => {
-    if (item.name === "Approvals") {
-      return {
-        ...item,
-        count: operationsSummary.pendingApprovals,
-      };
-    }
+  const navigation = baseNavigation
+    .map((item) => {
+      if (item.name === "Approvals") {
+        return {
+          ...item,
+          count: operationsSummary.pendingApprovals,
+        };
+      }
 
-    if (item.name === "Exceptions") {
-      return {
-        ...item,
-        count: operationsSummary.openExceptions,
-      };
-    }
+      if (item.name === "Exceptions") {
+        return {
+          ...item,
+          count: operationsSummary.openExceptions,
+        };
+      }
 
-    return item;
-  });
+      return item;
+    })
+    .concat(
+      authUser?.role === "Administrator"
+        ? [
+            {
+              name: "Users",
+              icon: Users,
+            },
+          ]
+        : []
+    );
 
   async function refreshOperationsSummary() {
     try {
@@ -494,7 +508,11 @@ function App() {
             </div>
           </div>
 
-          {active === "Documents" ? (
+          {active === "Users" ? (
+            <UserManagement
+              currentUser={authUser}
+            />
+          ) : active === "Documents" ? (
             <Documents />
           ) : active === "Dashboard" ? (
             <LiveDashboard
@@ -505,6 +523,11 @@ function App() {
             />
           ) : active === "Audit Logs" ? (
             <AuditLogs />
+          ) : active === "Settings" ? (
+            <div className="settings-security-stack">
+              <EnterpriseModule module="Settings" />
+              <AccountSecurity user={authUser} />
+            </div>
           ) : [
             "Invoices",
             "Purchase Orders",
@@ -513,7 +536,6 @@ function App() {
             "Automation",
             "Exceptions",
             "Reports",
-            "Settings",
           ].includes(active) ? (
             <EnterpriseModule module={active} />
           ) : (
