@@ -117,40 +117,6 @@ function ensureSupplier(
     return supplier;
   }
 
-  /*
-   * supplier_code is still globally unique in the
-   * current schema. Until Block 14B.2E changes this
-   * to organisation-scoped uniqueness, fail safely
-   * if another organisation owns this code.
-   */
-  const conflictingSupplier =
-    db.prepare(`
-      SELECT
-        id,
-        organisation_id
-      FROM suppliers
-      WHERE supplier_code = ?
-      LIMIT 1
-    `).get(
-      supplierCode
-    );
-
-  if (
-    conflictingSupplier &&
-    conflictingSupplier.organisation_id !==
-      organisationId
-  ) {
-    const error =
-      new Error(
-        "Scenario supplier code belongs to another organisation. Per-organisation supplier uniqueness migration is required."
-      );
-
-    error.status = 409;
-    error.code =
-      "SUPPLIER_SCHEMA_MIGRATION_REQUIRED";
-
-    throw error;
-  }
 
   const id =
     randomUUID();
@@ -242,39 +208,6 @@ function ensurePurchaseOrder(
     return purchaseOrder;
   }
 
-  /*
-   * po_number remains globally unique until
-   * Block 14B.2E. Detect cross-company conflict
-   * rather than silently reusing another tenant's PO.
-   */
-  const conflictingPO =
-    db.prepare(`
-      SELECT
-        id,
-        organisation_id
-      FROM purchase_orders
-      WHERE po_number = ?
-      LIMIT 1
-    `).get(
-      poNumber
-    );
-
-  if (
-    conflictingPO &&
-    conflictingPO.organisation_id !==
-      organisationId
-  ) {
-    const error =
-      new Error(
-        "Scenario purchase-order number belongs to another organisation. Per-organisation PO uniqueness migration is required."
-      );
-
-    error.status = 409;
-    error.code =
-      "PURCHASE_ORDER_SCHEMA_MIGRATION_REQUIRED";
-
-    throw error;
-  }
 
   const poId =
     randomUUID();

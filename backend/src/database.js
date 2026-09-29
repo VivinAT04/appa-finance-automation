@@ -107,7 +107,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS suppliers (
     id TEXT PRIMARY KEY,
-    supplier_code TEXT NOT NULL UNIQUE,
+    supplier_code TEXT NOT NULL,
     name TEXT NOT NULL,
     email TEXT,
     tax_id TEXT,
@@ -119,7 +119,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS purchase_orders (
     id TEXT PRIMARY KEY,
-    po_number TEXT NOT NULL UNIQUE,
+    po_number TEXT NOT NULL,
     supplier_id TEXT NOT NULL,
     order_date TEXT,
     currency TEXT NOT NULL DEFAULT 'INR',
@@ -222,10 +222,21 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS app_settings (
-    setting_key TEXT PRIMARY KEY,
+    organisation_id TEXT NOT NULL,
+    setting_key TEXT NOT NULL,
     setting_value TEXT NOT NULL,
     description TEXT,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+
+    PRIMARY KEY (
+      organisation_id,
+      setting_key
+    ),
+
+    FOREIGN KEY (
+      organisation_id
+    )
+      REFERENCES organisations(id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier
