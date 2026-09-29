@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   Search,
   Bell,
   ChevronDown,
+  LogOut,
   ArrowUpRight,
   Clock3,
   CircleCheck,
@@ -24,13 +25,20 @@ import {
 } from "lucide-react";
 
 import appaLogo from "./assets/appa-logo.png";
-import { getDashboardData,
-  getOperationsSummary
+import {
+  getCurrentUser,
+  getDashboardData,
+  getOperationsSummary,
+  getStoredAuthToken,
+  loginUser,
+  logoutUser,
+  setStoredAuthToken,
 } from "./api";
 import Documents from "./components/Documents";
 import EnterpriseModule from "./components/EnterpriseModule";
 import AuditLogs from "./components/AuditLogs";
 import LiveDashboard from "./components/LiveDashboard";
+import Login from "./components/Login";
 import "./App.css";
 
 const baseNavigation = [
@@ -60,6 +68,137 @@ function Status({ value }) {
 }
 
 function App() {
+  const [authUser, setAuthUser] =
+    useState(null);
+
+  const [authLoading, setAuthLoading] =
+    useState(true);
+
+  const [loginLoading, setLoginLoading] =
+    useState(false);
+
+  const [authError, setAuthError] =
+    useState("");
+
+  const userInitials = useMemo(() => {
+    const name = String(
+      authUser?.fullName || ""
+    ).trim();
+
+    if (!name) return "AP";
+
+    const parts = name
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (parts.length === 1) {
+      return parts[0]
+        .slice(0, 2)
+        .toUpperCase();
+    }
+
+    return (
+      parts[0][0] +
+      parts[parts.length - 1][0]
+    ).toUpperCase();
+  }, [authUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const token =
+        getStoredAuthToken();
+
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const user =
+          await getCurrentUser();
+
+        if (!cancelled) {
+          setAuthUser(user);
+        }
+      } catch {
+        setStoredAuthToken(null);
+
+        if (!cancelled) {
+          setAuthUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    restoreSession();
+
+    function sessionExpired() {
+      setStoredAuthToken(null);
+      setAuthUser(null);
+      setAuthError(
+        "Your session expired. Please sign in again."
+      );
+    }
+
+    window.addEventListener(
+      "appa-auth-expired",
+      sessionExpired
+    );
+
+    return () => {
+      cancelled = true;
+
+      window.removeEventListener(
+        "appa-auth-expired",
+        sessionExpired
+      );
+    };
+  }, []);
+
+  async function handleLogin({
+    email,
+    password,
+  }) {
+    try {
+      setLoginLoading(true);
+      setAuthError("");
+
+      const result = await loginUser(
+        email,
+        password
+      );
+
+      setStoredAuthToken(result.token);
+      setAuthUser(result.user);
+    } catch (error) {
+      setStoredAuthToken(null);
+
+      setAuthError(
+        error?.response?.data?.message ||
+          "Unable to sign in."
+      );
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logoutUser();
+    } catch {
+      // A failed logout request must still clear
+      // the local authenticated session.
+    } finally {
+      setStoredAuthToken(null);
+      setAuthUser(null);
+      setAuthError("");
+    }
+  }
 
   const [operationsSummary, setOperationsSummary] =
     useState({
@@ -102,6 +241,8 @@ function App() {
   }
 
   useEffect(() => {
+    if (!authUser) return undefined;
+
     refreshOperationsSummary();
 
     const timer = window.setInterval(
@@ -111,7 +252,7 @@ function App() {
 
     return () =>
       window.clearInterval(timer);
-  }, []);
+  }, [authUser]);
 
 
   const [active, setActive] = useState("Dashboard");
@@ -121,6 +262,8 @@ function App() {
   const [dashboardError, setDashboardError] = useState("");
 
   useEffect(() => {
+    if (!authUser) return undefined;
+
     let cancelled = false;
 
     async function loadDashboard() {
@@ -153,7 +296,38 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, authUser]);
+
+  if (authLoading) {
+    return (
+      <div className="auth-loading-screen">
+        <div className="auth-loading-mark">
+          <img
+            src={appaLogo}
+            alt="APPA Finance"
+          />
+        </div>
+
+        <strong>
+          Securing APPA Finance
+        </strong>
+
+        <span>
+          Verifying your session...
+        </span>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <Login
+        onLogin={handleLogin}
+        loading={loginLoading}
+        error={authError}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -240,15 +414,30 @@ function App() {
             <span>Settings</span>
           </button>
 
-          <div className="profile">
-            <div className="profile-avatar">VA</div>
-
-            <div className="profile-copy">
-              <strong>Vivin A T</strong>
-              <small>Administrator</small>
+          <div className="profile auth-profile">
+            <div className="profile-avatar">
+              {userInitials}
             </div>
 
-            <ChevronDown size={15} />
+            <div className="profile-copy">
+              <strong>
+                {authUser.fullName}
+              </strong>
+
+              <small>
+                {authUser.role}
+              </small>
+            </div>
+
+            <button
+              type="button"
+              className="profile-logout"
+              onClick={handleLogout}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={15} />
+            </button>
           </div>
         </div>
       </aside>
@@ -277,10 +466,7 @@ function App() {
               <span className="notification-dot" />
             </button>
 
-            <button className="user-button">
-              <span>VA</span>
-              <ChevronDown size={14} />
-            </button>
+
           </div>
         </header>
 

@@ -7,6 +7,67 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+const AUTH_TOKEN_KEY = "appa_auth_token";
+
+export function getStoredAuthToken() {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setStoredAuthToken(token) {
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
+api.interceptors.request.use((config) => {
+  const token = getStoredAuthToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error?.response?.status === 401 &&
+      !error?.config?.url?.includes("/auth/login")
+    ) {
+      setStoredAuthToken(null);
+
+      window.dispatchEvent(
+        new CustomEvent("appa-auth-expired")
+      );
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export async function loginUser(email, password) {
+  const response = await api.post("/auth/login", {
+    email,
+    password,
+  });
+
+  return response.data;
+}
+
+export async function getCurrentUser() {
+  const response = await api.get("/auth/me");
+  return response.data.user;
+}
+
+export async function logoutUser() {
+  const response = await api.post("/auth/logout");
+  return response.data;
+}
+
 export async function getDocuments() {
   const response = await api.get("/documents");
   return response.data.documents;
