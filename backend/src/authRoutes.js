@@ -148,6 +148,299 @@ router.post("/login", async (req, res) => {
   });
 });
 
+function hashResetToken(token) {
+  return crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+}
+
+function validNewPassword(password) {
+  return (
+    typeof password === "string" &&
+    password.length >= 12 &&
+    /[a-z]/.test(password) &&
+    /[A-Z]/.test(password) &&
+    /\d/.test(password)
+  );
+}
+
+router.post("/forgot-password", async (req, res) => {
+  const email = String(req.body?.email || "")
+    .trim()
+    .toLowerCase();
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email address is required.",
+    });
+  }
+
+  const genericMessage =
+    "If an active account exists for that email, password recovery instructions have been created.";
+
+  const user = db.prepare(`
+    SELECT *
+    FROM users
+    WHERE email = ?
+    LIMIT 1
+  `).get(email);
+
+  if (!user || user.status !== "Active") {
+    audit(
+      "AUTH_PASSWORD_RESET_REQUEST",
+      user?.id || null,
+      "Password recovery requested."
+    );
+
+    return res.json({
+      success: true,
+      message: genericMessage,
+    });
+  }
+
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashResetToken(rawToken);
+
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + 15 * 60 * 1000
+  ).toISOString();
+
+  db.prepare(`
+    UPDATE password_reset_tokens
+    SET used_at = ?
+    WHERE user_id = ?
+      AND used_at IS NULL
+  `).run(now.toISOString(), user.id);
+
+  db.prepare(`
+    INSERT INTO password_reset_tokens (
+      id,
+      user_id,
+      token_hash,
+      expires_at,
+      used_at,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, NULL, ?)
+  `).run(
+    crypto.randomUUID(),
+    user.id,
+    tokenHash,
+    expiresAt,
+    now.toISOString()
+  );
+
+  audit(
+    "AUTH_PASSWORD_RESET_REQUEST",
+    user.id,
+    `${user.full_name} requested password recovery.`
+  );
+
+  const response = {
+    success: true,
+    message: genericMessage,
+  };
+
+  /*
+   * No email provider is configured yet.
+   * Development mode may expose the raw reset token so
+   * the recovery workflow can be tested locally.
+   * Production must deliver this token out-of-band.
+   */
+  if (process.env.NODE_ENV !== "production") {
+    response.developmentResetToken = rawToken;
+    response.expiresAt = expiresAt;
+  }
+
+  return res.json(response);
+});
+
+router.post("/reset-password", async (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  const password = String(req.body?.password || "");
+
+  if (!token || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Reset token and new password are required.",
+    });
+  }
+
+  if (!validNewPassword(password)) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Password must be at least 12 characters and include uppercase, lowercase and a number.",
+    });
+  }
+
+  const tokenHash = hashResetToken(token);
+
+  const reset = db.prepare(`
+    SELECT
+      prt.*,
+      u.email,
+      u.full_name,
+      u.status
+    FROM password_reset_tokens prt
+    JOIN users u
+      ON u.id = prt.user_id
+    WHERE prt.token_hash = ?
+    LIMIT 1
+  `).get(tokenHash);
+
+  if (
+    !reset ||
+    reset.used_at ||
+    reset.status !== "Active" ||
+    new Date(reset.expires_at).getTime() <= Date.now()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "This password reset link is invalid or has expired.",
+    });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const now = new Date().toISOString();
+
+  const updatePassword = db.transaction(() => {
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      passwordHash,
+      now,
+      reset.user_id
+    );
+
+    db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = ?
+      WHERE user_id = ?
+        AND used_at IS NULL
+    `).run(now, reset.user_id);
+  });
+
+  updatePassword();
+
+  audit(
+    "AUTH_PASSWORD_RESET_SUCCESS",
+    reset.user_id,
+    `${reset.full_name} reset their password successfully.`
+  );
+
+  return res.json({
+    success: true,
+    message:
+      "Password updated successfully. You can now sign in.",
+  });
+});
+
+router.post(
+  "/change-password",
+  requireAuth,
+  async (req, res) => {
+    const currentPassword =
+      String(req.body?.currentPassword || "");
+
+    const newPassword =
+      String(req.body?.newPassword || "");
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Current password and new password are required.",
+      });
+    }
+
+    if (!validNewPassword(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must be at least 12 characters and include uppercase, lowercase and a number.",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Your new password must be different from your current password.",
+      });
+    }
+
+    const user = db.prepare(`
+      SELECT *
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(req.user.id);
+
+    if (!user || user.status !== "Active") {
+      return res.status(401).json({
+        success: false,
+        message: "User account is unavailable.",
+      });
+    }
+
+    const valid =
+      await bcrypt.compare(
+        currentPassword,
+        user.password_hash
+      );
+
+    if (!valid) {
+      audit(
+        "AUTH_PASSWORD_CHANGE_FAILED",
+        user.id,
+        `${user.full_name} supplied an incorrect current password.`
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+    }
+
+    const hash =
+      await bcrypt.hash(newPassword, 12);
+
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(hash, now, user.id);
+
+    db.prepare(`
+      UPDATE password_reset_tokens
+      SET used_at = ?
+      WHERE user_id = ?
+        AND used_at IS NULL
+    `).run(now, user.id);
+
+    audit(
+      "AUTH_PASSWORD_CHANGE_SUCCESS",
+      user.id,
+      `${user.full_name} changed their password successfully.`
+    );
+
+    return res.json({
+      success: true,
+      message: "Password changed successfully.",
+    });
+  }
+);
+
 router.get("/me", requireAuth, (req, res) => {
   const user = db.prepare(`
     SELECT *

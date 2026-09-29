@@ -58,6 +58,45 @@ export async function loginUser(email, password) {
   return response.data;
 }
 
+export async function requestPasswordReset(email) {
+  const response = await api.post(
+    "/auth/forgot-password",
+    { email }
+  );
+
+  return response.data;
+}
+
+export async function resetPassword(
+  token,
+  password
+) {
+  const response = await api.post(
+    "/auth/reset-password",
+    {
+      token,
+      password,
+    }
+  );
+
+  return response.data;
+}
+
+export async function changePassword(
+  currentPassword,
+  newPassword
+) {
+  const response = await api.post(
+    "/auth/change-password",
+    {
+      currentPassword,
+      newPassword,
+    }
+  );
+
+  return response.data;
+}
+
 export async function getCurrentUser() {
   const response = await api.get("/auth/me");
   return response.data.user;

@@ -3875,3 +3875,143 @@ a:not(.nav-item) {
     animation: none !important;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 12C — PASSWORD RECOVERY
+   ============================================================ */
+
+.auth-password-header {
+  margin-bottom: -11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auth-password-header > span {
+  color: #48564c;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.auth-password-header button,
+.auth-back {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #34724d;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-fast) ease;
+}
+
+.auth-password-header button:hover {
+  color: #1e5837;
+  transform: translateY(-1px);
+}
+
+.auth-back {
+  margin-bottom: 25px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6d7c72;
+}
+
+.auth-back:hover {
+  color: #285f40;
+  transform: translateX(-2px);
+}
+
+.auth-recovery-icon,
+.auth-success-icon {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 18px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #edf6f0;
+  color: #347a4f;
+  border: 1px solid #dbeadf;
+}
+
+.auth-success-icon {
+  background: #edf8f1;
+  color: #2f7a4b;
+}
+
+.auth-info,
+.auth-dev-note {
+  margin-top: 17px;
+  padding: 11px 12px;
+  border: 1px solid #dce9e0;
+  border-radius: 8px;
+  background: #f6faf7;
+  color: #52705c;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.auth-dev-note {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-color: #e3e8df;
+  background: #fafbf8;
+}
+
+.auth-dev-note strong {
+  color: #405348;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.auth-dev-note span {
+  color: #7b877f;
+}
+
+.auth-password-rules {
+  margin-top: -8px;
+  color: #8a958e;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.auth-complete .auth-submit {
+  width: 100%;
+  margin-top: 24px;
+}
+
+.auth-field input:-webkit-autofill,
+.auth-field input:-webkit-autofill:hover,
+.auth-field input:-webkit-autofill:focus,
+.auth-field input:-webkit-autofill:active {
+  -webkit-text-fill-color: #233129;
+  -webkit-box-shadow:
+    0 0 0 1000px #fbfcfb inset !important;
+  box-shadow:
+    0 0 0 1000px #fbfcfb inset !important;
+  caret-color: #233129;
+  transition:
+    background-color 9999s ease-out 0s;
+}
+
+.auth-field:focus-within
+input:-webkit-autofill {
+  -webkit-box-shadow:
+    0 0 0 1000px #ffffff inset !important;
+  box-shadow:
+    0 0 0 1000px #ffffff inset !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-password-header button,
+  .auth-back {
+    transition: none;
+  }
+}
