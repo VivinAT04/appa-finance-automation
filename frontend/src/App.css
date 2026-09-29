@@ -5120,3 +5120,271 @@ input:-webkit-autofill {
     transition: none;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 14C.3 — INTERACTION + TRANSITION POLISH
+   ============================================================ */
+
+:root {
+  --appa-motion-instant: 110ms;
+  --appa-motion-fast: 160ms;
+  --appa-motion-base: 240ms;
+  --appa-motion-page: 320ms;
+  --appa-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-select {
+  position: relative;
+  isolation: isolate;
+  transition:
+    background var(--appa-motion-fast) ease,
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) var(--appa-ease),
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.workspace-select:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 7px 20px rgba(24, 54, 35, 0.07);
+}
+
+.workspace-select:active {
+  transform: translateY(0);
+}
+
+.workspace-select:focus-visible {
+  outline: 2px solid rgba(47, 111, 69, 0.32);
+  outline-offset: 2px;
+}
+
+.workspace-select-open {
+  box-shadow:
+    0 8px 22px rgba(24, 54, 35, 0.08);
+}
+
+.workspace-avatar {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) var(--appa-ease);
+}
+
+.workspace-select:hover .workspace-avatar {
+  transform: scale(1.035);
+}
+
+.workspace-option {
+  position: relative;
+}
+
+.workspace-option:focus-visible {
+  outline: 2px solid rgba(47, 111, 69, 0.27);
+  outline-offset: -2px;
+}
+
+.workspace-option-active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: #3f8156;
+  content: "";
+}
+
+.workspace-menu {
+  will-change: opacity, transform;
+}
+
+.content {
+  animation:
+    appa-content-enter
+    var(--appa-motion-page)
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.content-workspace-transition {
+  animation:
+    appa-workspace-content-enter
+    var(--appa-motion-page)
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-workspace-content-enter {
+  from {
+    opacity: 0;
+    transform:
+      translateY(6px)
+      scale(0.998);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+.nav-item {
+  position: relative;
+  overflow: hidden;
+  transition:
+    color var(--appa-motion-fast) ease,
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.nav-item:hover {
+  transform: translateX(2px);
+}
+
+.nav-item:active {
+  transform: translateX(1px);
+}
+
+.nav-item::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2px;
+  height: 0;
+  border-radius: 0 2px 2px 0;
+  background: currentColor;
+  opacity: 0;
+  content: "";
+  transform: translateY(-50%);
+  transition:
+    height var(--appa-motion-base) var(--appa-ease),
+    opacity var(--appa-motion-fast) ease;
+}
+
+.nav-item.active::after {
+  height: 18px;
+  opacity: 0.65;
+}
+
+.nav-item:focus-visible,
+.sidebar-bottom-item:focus-visible {
+  outline: 2px solid rgba(47, 111, 69, 0.27);
+  outline-offset: -2px;
+}
+
+.sidebar-bottom-item {
+  transition:
+    background var(--appa-motion-fast) ease,
+    color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.sidebar-bottom-item:hover {
+  transform: translateX(2px);
+}
+
+.user-menu-button {
+  transition:
+    background var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) var(--appa-ease),
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.user-menu-button:hover {
+  transform: translateY(-1px);
+}
+
+.user-menu-button:focus-visible {
+  outline: 2px solid rgba(47, 111, 69, 0.27);
+  outline-offset: 2px;
+}
+
+.page-heading {
+  animation:
+    appa-heading-enter
+    300ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-heading-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-grid,
+.dashboard-lower-grid {
+  animation:
+    appa-dashboard-enter
+    360ms
+    var(--appa-ease)
+    both;
+}
+
+.dashboard-lower-grid {
+  animation-delay: 35ms;
+}
+
+@keyframes appa-dashboard-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content,
+  .content-workspace-transition,
+  .page-heading,
+  .dashboard-grid,
+  .dashboard-lower-grid {
+    animation: none !important;
+  }
+
+  .workspace-select,
+  .workspace-avatar,
+  .workspace-option,
+  .workspace-chevron,
+  .nav-item,
+  .nav-item::after,
+  .sidebar-bottom-item,
+  .user-menu-button {
+    transition: none !important;
+  }
+
+  .workspace-select:hover,
+  .workspace-select:active,
+  .workspace-select:hover .workspace-avatar,
+  .workspace-option:hover,
+  .nav-item:hover,
+  .nav-item:active,
+  .sidebar-bottom-item:hover,
+  .user-menu-button:hover {
+    transform: none !important;
+  }
+}

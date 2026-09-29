@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   LayoutDashboard,
@@ -97,6 +97,16 @@ function App() {
     setWorkspaceOpen,
   ] = useState(false);
 
+  const [
+    workspaceTransitioning,
+    setWorkspaceTransitioning,
+  ] = useState(false);
+
+  const workspaceRef = useRef(null);
+
+  const workspaceTransitionTimerRef =
+    useRef(null);
+
   const organisations =
     authUser?.organisations || [];
 
@@ -146,6 +156,63 @@ function App() {
         .slice(0, 2)
         .toUpperCase();
     }, [selectedOrganisation]);
+
+  useEffect(() => {
+    if (!workspaceOpen) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      if (
+        workspaceRef.current &&
+        !workspaceRef.current.contains(
+          event.target
+        )
+      ) {
+        setWorkspaceOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setWorkspaceOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+    };
+  }, [workspaceOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (
+        workspaceTransitionTimerRef.current
+      ) {
+        window.clearTimeout(
+          workspaceTransitionTimerRef.current
+        );
+      }
+    };
+  }, []);
 
   const userInitials = useMemo(() => {
     const name = String(
@@ -324,6 +391,17 @@ function App() {
       return;
     }
 
+    if (
+      workspaceTransitionTimerRef.current
+    ) {
+      window.clearTimeout(
+        workspaceTransitionTimerRef.current
+      );
+    }
+
+    setWorkspaceTransitioning(true);
+    setWorkspaceOpen(false);
+
     setStoredOrganisationId(
       organisationId
     );
@@ -331,8 +409,6 @@ function App() {
     setSelectedOrganisationId(
       organisationId
     );
-
-    setWorkspaceOpen(false);
 
     setActive("Dashboard");
 
@@ -346,6 +422,14 @@ function App() {
       exceptionInvoices: 0,
       automationStatus: "Idle",
     });
+
+    workspaceTransitionTimerRef.current =
+      window.setTimeout(() => {
+        setWorkspaceTransitioning(false);
+
+        workspaceTransitionTimerRef.current =
+          null;
+      }, 320);
   }
 
   const [operationsSummary, setOperationsSummary] =
@@ -514,7 +598,10 @@ function App() {
             WORKSPACE
           </span>
 
-          <div className="workspace-switcher">
+          <div
+            className="workspace-switcher"
+            ref={workspaceRef}
+          >
             <button
               type="button"
               className={`workspace-select ${
@@ -529,7 +616,10 @@ function App() {
               }
               aria-haspopup="listbox"
               aria-expanded={workspaceOpen}
-              aria-label="Select organisation workspace"
+              aria-label={`Current workspace: ${
+                selectedOrganisation?.name ||
+                "none"
+              }. Select organisation workspace`}
             >
               <span className="workspace-avatar">
                 {workspaceInitials}
@@ -772,7 +862,11 @@ function App() {
         </header>
 
         <section
-          className="content"
+          className={`content ${
+            workspaceTransitioning
+              ? "content-workspace-transition"
+              : ""
+          }`}
           key={
             selectedOrganisationId ||
             "no-organisation"
