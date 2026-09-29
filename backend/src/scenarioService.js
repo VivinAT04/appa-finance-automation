@@ -1,14 +1,74 @@
-const { randomUUID } = require("crypto");
-const db = require("./database");
-const { matchInvoice } = require("./matchingService");
+const {
+  randomUUID,
+} = require("crypto");
 
-const SCENARIO_PREFIX = "APPA-SCN-";
+const db =
+  require("./database");
+
+const {
+  matchInvoice,
+} = require("./matchingService");
+
+const SCENARIO_PREFIX =
+  "APPA-SCN-";
 
 function now() {
   return new Date().toISOString();
 }
 
-function audit(action, entityType, entityId, description) {
+function requireOrganisationId(
+  organisationId
+) {
+  if (!organisationId) {
+    throw new Error(
+      "organisationId is required for synthetic workflow scenarios."
+    );
+  }
+
+  const organisation =
+    db.prepare(`
+      SELECT
+        id,
+        name,
+        code,
+        status
+      FROM organisations
+      WHERE
+        id = ?
+        AND status = 'Active'
+    `).get(
+      organisationId
+    );
+
+  if (!organisation) {
+    const error =
+      new Error(
+        "Active organisation not found for synthetic workflow scenarios."
+      );
+
+    error.status = 404;
+    error.code =
+      "ORGANISATION_NOT_FOUND";
+
+    throw error;
+  }
+
+  return organisation;
+}
+
+function audit(
+  organisationId,
+  action,
+  entityType,
+  entityId,
+  description
+) {
+  if (!organisationId) {
+    throw new Error(
+      "organisationId is required for scenario audit events."
+    );
+  }
+
   db.prepare(`
     INSERT INTO audit_logs (
       id,
@@ -16,34 +76,87 @@ function audit(action, entityType, entityId, description) {
       entity_type,
       entity_id,
       description,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     randomUUID(),
     action,
     entityType,
     entityId,
     description,
-    now()
+    now(),
+    organisationId
   );
 }
 
-function ensureSupplier() {
-  const supplierCode = `${SCENARIO_PREFIX}SUPPLIER`;
+function ensureSupplier(
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
 
-  let supplier = db.prepare(`
-    SELECT *
-    FROM suppliers
-    WHERE supplier_code = ?
-  `).get(supplierCode);
+  const supplierCode =
+    `${SCENARIO_PREFIX}SUPPLIER`;
+
+  let supplier =
+    db.prepare(`
+      SELECT *
+      FROM suppliers
+      WHERE
+        supplier_code = ?
+        AND organisation_id = ?
+    `).get(
+      supplierCode,
+      organisationId
+    );
 
   if (supplier) {
     return supplier;
   }
 
-  const id = randomUUID();
-  const timestamp = now();
+  /*
+   * supplier_code is still globally unique in the
+   * current schema. Until Block 14B.2E changes this
+   * to organisation-scoped uniqueness, fail safely
+   * if another organisation owns this code.
+   */
+  const conflictingSupplier =
+    db.prepare(`
+      SELECT
+        id,
+        organisation_id
+      FROM suppliers
+      WHERE supplier_code = ?
+      LIMIT 1
+    `).get(
+      supplierCode
+    );
+
+  if (
+    conflictingSupplier &&
+    conflictingSupplier.organisation_id !==
+      organisationId
+  ) {
+    const error =
+      new Error(
+        "Scenario supplier code belongs to another organisation. Per-organisation supplier uniqueness migration is required."
+      );
+
+    error.status = 409;
+    error.code =
+      "SUPPLIER_SCHEMA_MIGRATION_REQUIRED";
+
+    throw error;
+  }
+
+  const id =
+    randomUUID();
+
+  const timestamp =
+    now();
 
   db.prepare(`
     INSERT INTO suppliers (
@@ -55,9 +168,12 @@ function ensureSupplier() {
       payment_terms_days,
       status,
       created_at,
-      updated_at
+      updated_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )
   `).run(
     id,
     supplierCode,
@@ -67,31 +183,104 @@ function ensureSupplier() {
     30,
     "Active",
     timestamp,
-    timestamp
+    timestamp,
+    organisationId
   );
 
   return db.prepare(`
     SELECT *
     FROM suppliers
-    WHERE id = ?
-  `).get(id);
+    WHERE
+      id = ?
+      AND organisation_id = ?
+  `).get(
+    id,
+    organisationId
+  );
 }
 
-function ensurePurchaseOrder(supplier) {
-  const poNumber = `${SCENARIO_PREFIX}PO-1001`;
+function ensurePurchaseOrder(
+  supplier,
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
 
-  let purchaseOrder = db.prepare(`
-    SELECT *
-    FROM purchase_orders
-    WHERE po_number = ?
-  `).get(poNumber);
+  if (
+    !supplier ||
+    supplier.organisation_id !==
+      organisationId
+  ) {
+    throw new Error(
+      "Scenario supplier does not belong to the selected organisation."
+    );
+  }
+
+  const poNumber =
+    `${SCENARIO_PREFIX}PO-1001`;
+
+  let purchaseOrder =
+    db.prepare(`
+      SELECT po.*
+      FROM purchase_orders po
+
+      INNER JOIN suppliers s
+        ON s.id = po.supplier_id
+
+      WHERE
+        po.po_number = ?
+        AND po.organisation_id = ?
+        AND s.organisation_id = ?
+    `).get(
+      poNumber,
+      organisationId,
+      organisationId
+    );
 
   if (purchaseOrder) {
     return purchaseOrder;
   }
 
-  const poId = randomUUID();
-  const timestamp = now();
+  /*
+   * po_number remains globally unique until
+   * Block 14B.2E. Detect cross-company conflict
+   * rather than silently reusing another tenant's PO.
+   */
+  const conflictingPO =
+    db.prepare(`
+      SELECT
+        id,
+        organisation_id
+      FROM purchase_orders
+      WHERE po_number = ?
+      LIMIT 1
+    `).get(
+      poNumber
+    );
+
+  if (
+    conflictingPO &&
+    conflictingPO.organisation_id !==
+      organisationId
+  ) {
+    const error =
+      new Error(
+        "Scenario purchase-order number belongs to another organisation. Per-organisation PO uniqueness migration is required."
+      );
+
+    error.status = 409;
+    error.code =
+      "PURCHASE_ORDER_SCHEMA_MIGRATION_REQUIRED";
+
+    throw error;
+  }
+
+  const poId =
+    randomUUID();
+
+  const timestamp =
+    now();
 
   db.prepare(`
     INSERT INTO purchase_orders (
@@ -105,9 +294,12 @@ function ensurePurchaseOrder(supplier) {
       total_amount,
       status,
       created_at,
-      updated_at
+      updated_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )
   `).run(
     poId,
     poNumber,
@@ -119,40 +311,45 @@ function ensurePurchaseOrder(supplier) {
     27140,
     "Open",
     timestamp,
-    timestamp
+    timestamp,
+    organisationId
   );
 
-  const insertLine = db.prepare(`
-    INSERT INTO purchase_order_items (
-      id,
-      purchase_order_id,
-      description,
-      quantity,
-      unit_price,
-      line_total,
-      position,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const insertLine =
+    db.prepare(`
+      INSERT INTO purchase_order_items (
+        id,
+        purchase_order_id,
+        description,
+        quantity,
+        unit_price,
+        line_total,
+        position,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
   const lines = [
     {
-      description: "Office Chairs",
+      description:
+        "Office Chairs",
       quantity: 4,
       unitPrice: 4500,
       taxRate: 18,
       lineTotal: 18000,
     },
     {
-      description: "Printer Paper",
+      description:
+        "Printer Paper",
       quantity: 10,
       unitPrice: 300,
       taxRate: 18,
       lineTotal: 3000,
     },
     {
-      description: "File Storage Boxes",
+      description:
+        "File Storage Boxes",
       quantity: 5,
       unitPrice: 400,
       taxRate: 18,
@@ -160,32 +357,47 @@ function ensurePurchaseOrder(supplier) {
     },
   ];
 
-  lines.forEach((line, index) => {
-    insertLine.run(
-      randomUUID(),
-      poId,
-      line.description,
-      line.quantity,
-      line.unitPrice,
-      line.lineTotal,
-      index,
-      timestamp
-    );
-  });
+  lines.forEach(
+    (line, index) => {
+      insertLine.run(
+        randomUUID(),
+        poId,
+        line.description,
+        line.quantity,
+        line.unitPrice,
+        line.lineTotal,
+        index,
+        timestamp
+      );
+    }
+  );
 
   return db.prepare(`
     SELECT *
     FROM purchase_orders
-    WHERE id = ?
-  `).get(poId);
+    WHERE
+      id = ?
+      AND organisation_id = ?
+  `).get(
+    poId,
+    organisationId
+  );
 }
 
 function createDocument({
+  organisationId,
   scenario,
   filename,
 }) {
-  const id = randomUUID();
-  const timestamp = now();
+  requireOrganisationId(
+    organisationId
+  );
+
+  const id =
+    randomUUID();
+
+  const timestamp =
+    now();
 
   db.prepare(`
     INSERT INTO documents (
@@ -198,9 +410,12 @@ function createDocument({
       status,
       extraction_status,
       uploaded_by,
-      created_at
+      created_at,
+      organisation_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )
   `).run(
     id,
     filename,
@@ -211,13 +426,15 @@ function createDocument({
     "Processed",
     "Completed",
     "Scenario Runner",
-    timestamp
+    timestamp,
+    organisationId
   );
 
   return id;
 }
 
 function createInvoice({
+  organisationId,
   scenario,
   invoiceNumber,
   supplier,
@@ -227,30 +444,59 @@ function createInvoice({
   totalAmount,
   lines,
 }) {
-  const existing = db.prepare(`
-    SELECT id
-    FROM invoices
-    WHERE document_id IN (
-      SELECT id
-      FROM documents
-      WHERE stored_name = ?
-    )
-  `).get(
-    `${SCENARIO_PREFIX}${scenario}.synthetic`
+  requireOrganisationId(
+    organisationId
   );
+
+  if (
+    !supplier ||
+    supplier.organisation_id !==
+      organisationId
+  ) {
+    throw new Error(
+      "Scenario invoice supplier does not belong to the selected organisation."
+    );
+  }
+
+  const storedName =
+    `${SCENARIO_PREFIX}${scenario}.synthetic`;
+
+  const existing =
+    db.prepare(`
+      SELECT i.id
+
+      FROM invoices i
+
+      INNER JOIN documents d
+        ON d.id = i.document_id
+
+      WHERE
+        d.stored_name = ?
+        AND d.organisation_id = ?
+    `).get(
+      storedName,
+      organisationId
+    );
 
   if (existing) {
     return existing.id;
   }
 
-  const documentId = createDocument({
-    scenario,
-    filename:
-      `${scenario.toLowerCase().replaceAll("_", "-")}.pdf`,
-  });
+  const documentId =
+    createDocument({
+      organisationId,
+      scenario,
+      filename:
+        `${scenario
+          .toLowerCase()
+          .replaceAll("_", "-")}.pdf`,
+    });
 
-  const invoiceId = randomUUID();
-  const timestamp = now();
+  const invoiceId =
+    randomUUID();
+
+  const timestamp =
+    now();
 
   db.prepare(`
     INSERT INTO invoices (
@@ -298,36 +544,40 @@ function createInvoice({
     timestamp
   );
 
-  const insertLine = db.prepare(`
-    INSERT INTO invoice_line_items (
-      id,
-      invoice_id,
-      description,
-      quantity,
-      unit_price,
-      tax_rate,
-      line_total,
-      position,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const insertLine =
+    db.prepare(`
+      INSERT INTO invoice_line_items (
+        id,
+        invoice_id,
+        description,
+        quantity,
+        unit_price,
+        tax_rate,
+        line_total,
+        position,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-  lines.forEach((line, index) => {
-    insertLine.run(
-      randomUUID(),
-      invoiceId,
-      line.description,
-      line.quantity,
-      line.unitPrice,
-      line.taxRate,
-      line.lineTotal,
-      index,
-      timestamp
-    );
-  });
+  lines.forEach(
+    (line, index) => {
+      insertLine.run(
+        randomUUID(),
+        invoiceId,
+        line.description,
+        line.quantity,
+        line.unitPrice,
+        line.taxRate,
+        line.lineTotal,
+        index,
+        timestamp
+      );
+    }
+  );
 
   audit(
+    organisationId,
     "SCENARIO_INVOICE_CREATED",
     "invoice",
     invoiceId,
@@ -340,21 +590,24 @@ function createInvoice({
 function baseLines() {
   return [
     {
-      description: "Office Chairs",
+      description:
+        "Office Chairs",
       quantity: 4,
       unitPrice: 4500,
       taxRate: 18,
       lineTotal: 18000,
     },
     {
-      description: "Printer Paper",
+      description:
+        "Printer Paper",
       quantity: 10,
       unitPrice: 300,
       taxRate: 18,
       lineTotal: 3000,
     },
     {
-      description: "File Storage Boxes",
+      description:
+        "File Storage Boxes",
       quantity: 5,
       unitPrice: 400,
       taxRate: 18,
@@ -363,23 +616,42 @@ function baseLines() {
   ];
 }
 
-function seedScenarios() {
-  const supplier = ensureSupplier();
+function seedScenarios(
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
+
+  const supplier =
+    ensureSupplier(
+      organisationId
+    );
+
   const purchaseOrder =
-    ensurePurchaseOrder(supplier);
+    ensurePurchaseOrder(
+      supplier,
+      organisationId
+    );
 
-  const cleanInvoiceId = createInvoice({
-    scenario: "CLEAN_MATCH",
-    invoiceNumber: `${SCENARIO_PREFIX}INV-CLEAN-001`,
-    supplier,
-    poNumber: purchaseOrder.po_number,
-    subtotal: 23000,
-    taxAmount: 4140,
-    totalAmount: 27140,
-    lines: baseLines(),
-  });
+  const cleanInvoiceId =
+    createInvoice({
+      organisationId,
+      scenario:
+        "CLEAN_MATCH",
+      invoiceNumber:
+        `${SCENARIO_PREFIX}INV-CLEAN-001`,
+      supplier,
+      poNumber:
+        purchaseOrder.po_number,
+      subtotal: 23000,
+      taxAmount: 4140,
+      totalAmount: 27140,
+      lines: baseLines(),
+    });
 
-  const mismatchLines = baseLines();
+  const mismatchLines =
+    baseLines();
 
   mismatchLines[0] = {
     ...mismatchLines[0],
@@ -387,50 +659,55 @@ function seedScenarios() {
     lineTotal: 20000,
   };
 
-  const mismatchInvoiceId = createInvoice({
-    scenario: "AMOUNT_MISMATCH",
-    invoiceNumber:
-      `${SCENARIO_PREFIX}INV-MISMATCH-001`,
-    supplier,
-    poNumber: purchaseOrder.po_number,
-    subtotal: 25000,
-    taxAmount: 4500,
-    totalAmount: 29500,
-    lines: mismatchLines,
-  });
+  const mismatchInvoiceId =
+    createInvoice({
+      organisationId,
+      scenario:
+        "AMOUNT_MISMATCH",
+      invoiceNumber:
+        `${SCENARIO_PREFIX}INV-MISMATCH-001`,
+      supplier,
+      poNumber:
+        purchaseOrder.po_number,
+      subtotal: 25000,
+      taxAmount: 4500,
+      totalAmount: 29500,
+      lines: mismatchLines,
+    });
 
-  const missingPOInvoiceId = createInvoice({
-    scenario: "MISSING_PO",
-    invoiceNumber:
-      `${SCENARIO_PREFIX}INV-MISSING-PO-001`,
-    supplier,
-    poNumber: "",
-    subtotal: 23000,
-    taxAmount: 4140,
-    totalAmount: 27140,
-    lines: baseLines(),
-  });
+  const missingPOInvoiceId =
+    createInvoice({
+      organisationId,
+      scenario:
+        "MISSING_PO",
+      invoiceNumber:
+        `${SCENARIO_PREFIX}INV-MISSING-PO-001`,
+      supplier,
+      poNumber: "",
+      subtotal: 23000,
+      taxAmount: 4140,
+      totalAmount: 27140,
+      lines: baseLines(),
+    });
 
-  /*
-   * Duplicate scenario:
-   *
-   * This deliberately reuses the clean invoice's
-   * invoice number, supplier and total amount while
-   * remaining a separate invoice/document record.
-   */
-  const duplicateInvoiceId = createInvoice({
-    scenario: "DUPLICATE_INVOICE",
-    invoiceNumber:
-      `${SCENARIO_PREFIX}INV-CLEAN-001`,
-    supplier,
-    poNumber: purchaseOrder.po_number,
-    subtotal: 23000,
-    taxAmount: 4140,
-    totalAmount: 27140,
-    lines: baseLines(),
-  });
+  const duplicateInvoiceId =
+    createInvoice({
+      organisationId,
+      scenario:
+        "DUPLICATE_INVOICE",
+      invoiceNumber:
+        `${SCENARIO_PREFIX}INV-CLEAN-001`,
+      supplier,
+      poNumber:
+        purchaseOrder.po_number,
+      subtotal: 23000,
+      taxAmount: 4140,
+      totalAmount: 27140,
+      lines: baseLines(),
+    });
 
   audit(
+    organisationId,
     "SCENARIO_DATA_SEEDED",
     "system",
     "APPA_WORKFLOW_SCENARIOS",
@@ -438,34 +715,51 @@ function seedScenarios() {
   );
 
   return {
-    supplierId: supplier.id,
-    purchaseOrderId: purchaseOrder.id,
+    supplierId:
+      supplier.id,
+
+    purchaseOrderId:
+      purchaseOrder.id,
 
     scenarios: {
       cleanMatch: {
-        invoiceId: cleanInvoiceId,
-        expected: "Matched",
+        invoiceId:
+          cleanInvoiceId,
+        expected:
+          "Matched",
       },
 
       amountMismatch: {
-        invoiceId: mismatchInvoiceId,
-        expected: "Exception",
+        invoiceId:
+          mismatchInvoiceId,
+        expected:
+          "Exception",
       },
 
       missingPO: {
-        invoiceId: missingPOInvoiceId,
-        expected: "Exception",
+        invoiceId:
+          missingPOInvoiceId,
+        expected:
+          "Exception",
       },
 
       duplicateInvoice: {
-        invoiceId: duplicateInvoiceId,
-        expected: "Exception",
+        invoiceId:
+          duplicateInvoiceId,
+        expected:
+          "Exception",
       },
     },
   };
 }
 
-function getScenarioInvoices() {
+function getScenarioInvoices(
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
+
   return db.prepare(`
     SELECT
       i.id,
@@ -488,192 +782,377 @@ function getScenarioInvoices() {
       (
         SELECT COUNT(*)
         FROM exceptions e
-        WHERE e.invoice_id = i.id
+        WHERE
+          e.invoice_id = i.id
           AND e.status = 'Open'
       ) AS openExceptions,
 
       (
         SELECT a.decision
         FROM approvals a
-        WHERE a.invoice_id = i.id
-        ORDER BY a.created_at DESC
+        WHERE
+          a.invoice_id = i.id
+        ORDER BY
+          a.created_at DESC
         LIMIT 1
       ) AS latestDecision
 
     FROM invoices i
 
-    JOIN documents d
+    INNER JOIN documents d
       ON d.id = i.document_id
 
     LEFT JOIN invoice_matches im
       ON im.invoice_id = i.id
 
-    WHERE d.stored_name LIKE ?
+    WHERE
+      d.stored_name LIKE ?
+      AND d.organisation_id = ?
 
-    ORDER BY i.created_at ASC
-  `).all(`${SCENARIO_PREFIX}%`);
+    ORDER BY
+      i.created_at ASC
+  `).all(
+    `${SCENARIO_PREFIX}%`,
+    organisationId
+  );
 }
 
-function getScenarioResults() {
-  const invoices = getScenarioInvoices();
+function getScenarioResults(
+  organisationId
+) {
+  const invoices =
+    getScenarioInvoices(
+      organisationId
+    );
 
-  return invoices.map((invoice) => {
-    const marker =
-      invoice.validationMessage || "";
+  return invoices.map(
+    (invoice) => {
+      const marker =
+        invoice.validationMessage ||
+        "";
 
-    const scenario =
-      marker.replace(
-        "Synthetic APPA scenario: ",
-        ""
-      );
+      const scenario =
+        marker.replace(
+          "Synthetic APPA scenario: ",
+          ""
+        );
 
-    let expected = "Exception";
+      let expected =
+        "Exception";
 
-    if (scenario === "CLEAN_MATCH") {
-      expected = "Matched";
+      if (
+        scenario ===
+        "CLEAN_MATCH"
+      ) {
+        expected =
+          "Matched";
+      }
+
+      const actual =
+        invoice.matchStatus ||
+        "Not Run";
+
+      let passed = false;
+
+      if (
+        expected ===
+        "Matched"
+      ) {
+        passed =
+          actual === "Matched" &&
+          invoice.latestDecision ===
+            "Approved" &&
+          Number(
+            invoice.openExceptions
+          ) === 0;
+      } else {
+        passed =
+          actual ===
+            "Exception" &&
+          Number(
+            invoice.openExceptions
+          ) > 0;
+      }
+
+      return {
+        scenario,
+        invoiceId:
+          invoice.id,
+        invoiceNumber:
+          invoice.invoiceNumber,
+        expected,
+        actual,
+        matchScore:
+          invoice.matchScore,
+        openExceptions:
+          Number(
+            invoice.openExceptions ||
+            0
+          ),
+        approval:
+          invoice.latestDecision ||
+          null,
+        passed,
+      };
     }
-
-    const actual =
-      invoice.matchStatus || "Not Run";
-
-    let passed = false;
-
-    if (expected === "Matched") {
-      passed =
-        actual === "Matched" &&
-        invoice.latestDecision === "Approved" &&
-        Number(invoice.openExceptions) === 0;
-    } else {
-      passed =
-        actual === "Exception" &&
-        Number(invoice.openExceptions) > 0;
-    }
-
-    return {
-      scenario,
-      invoiceId: invoice.id,
-      invoiceNumber:
-        invoice.invoiceNumber,
-      expected,
-      actual,
-      matchScore:
-        invoice.matchScore,
-      openExceptions:
-        Number(
-          invoice.openExceptions || 0
-        ),
-      approval:
-        invoice.latestDecision || null,
-      passed,
-    };
-  });
+  );
 }
 
-function removeScenarioData() {
-  const docs = db.prepare(`
-    SELECT id
-    FROM documents
-    WHERE stored_name LIKE ?
-  `).all(`${SCENARIO_PREFIX}%`);
+function removeScenarioData(
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
+
+  const docs =
+    db.prepare(`
+      SELECT id
+      FROM documents
+      WHERE
+        stored_name LIKE ?
+        AND organisation_id = ?
+    `).all(
+      `${SCENARIO_PREFIX}%`,
+      organisationId
+    );
 
   const documentIds =
-    docs.map((row) => row.id);
+    docs.map(
+      (row) => row.id
+    );
 
   const invoiceRows =
     documentIds.length
       ? db.prepare(`
-          SELECT id
-          FROM invoices
-          WHERE document_id IN (
-            ${documentIds.map(() => "?").join(",")}
-          )
-        `).all(...documentIds)
+          SELECT i.id
+
+          FROM invoices i
+
+          INNER JOIN documents d
+            ON d.id =
+               i.document_id
+
+          WHERE
+            i.document_id IN (
+              ${documentIds
+                .map(() => "?")
+                .join(",")}
+            )
+
+            AND d.organisation_id = ?
+        `).all(
+          ...documentIds,
+          organisationId
+        )
       : [];
 
   const invoiceIds =
-    invoiceRows.map((row) => row.id);
+    invoiceRows.map(
+      (row) => row.id
+    );
 
-  const transaction = db.transaction(() => {
-    if (invoiceIds.length) {
-      const placeholders =
-        invoiceIds
-          .map(() => "?")
-          .join(",");
+  const transaction =
+    db.transaction(() => {
+      if (
+        invoiceIds.length
+      ) {
+        const placeholders =
+          invoiceIds
+            .map(() => "?")
+            .join(",");
+
+        db.prepare(`
+          DELETE FROM approvals
+          WHERE
+            invoice_id IN (
+              ${placeholders}
+            )
+            AND invoice_id IN (
+              SELECT i.id
+              FROM invoices i
+              INNER JOIN documents d
+                ON d.id =
+                   i.document_id
+              WHERE
+                d.organisation_id = ?
+            )
+        `).run(
+          ...invoiceIds,
+          organisationId
+        );
+
+        db.prepare(`
+          DELETE FROM exceptions
+          WHERE
+            invoice_id IN (
+              ${placeholders}
+            )
+            AND invoice_id IN (
+              SELECT i.id
+              FROM invoices i
+              INNER JOIN documents d
+                ON d.id =
+                   i.document_id
+              WHERE
+                d.organisation_id = ?
+            )
+        `).run(
+          ...invoiceIds,
+          organisationId
+        );
+
+        db.prepare(`
+          DELETE FROM invoice_matches
+          WHERE
+            invoice_id IN (
+              ${placeholders}
+            )
+            AND invoice_id IN (
+              SELECT i.id
+              FROM invoices i
+              INNER JOIN documents d
+                ON d.id =
+                   i.document_id
+              WHERE
+                d.organisation_id = ?
+            )
+        `).run(
+          ...invoiceIds,
+          organisationId
+        );
+
+        db.prepare(`
+          DELETE FROM invoice_line_items
+          WHERE
+            invoice_id IN (
+              ${placeholders}
+            )
+            AND invoice_id IN (
+              SELECT i.id
+              FROM invoices i
+              INNER JOIN documents d
+                ON d.id =
+                   i.document_id
+              WHERE
+                d.organisation_id = ?
+            )
+        `).run(
+          ...invoiceIds,
+          organisationId
+        );
+
+        db.prepare(`
+          DELETE FROM invoices
+          WHERE
+            id IN (
+              ${placeholders}
+            )
+            AND document_id IN (
+              SELECT id
+              FROM documents
+              WHERE organisation_id = ?
+            )
+        `).run(
+          ...invoiceIds,
+          organisationId
+        );
+      }
+
+      if (
+        documentIds.length
+      ) {
+        const placeholders =
+          documentIds
+            .map(() => "?")
+            .join(",");
+
+        db.prepare(`
+          DELETE FROM documents
+          WHERE
+            id IN (
+              ${placeholders}
+            )
+            AND organisation_id = ?
+        `).run(
+          ...documentIds,
+          organisationId
+        );
+      }
+
+      const poRows =
+        db.prepare(`
+          SELECT id
+          FROM purchase_orders
+          WHERE
+            po_number LIKE ?
+            AND organisation_id = ?
+        `).all(
+          `${SCENARIO_PREFIX}%`,
+          organisationId
+        );
+
+      const poIds =
+        poRows.map(
+          (row) => row.id
+        );
+
+      if (
+        poIds.length
+      ) {
+        const placeholders =
+          poIds
+            .map(() => "?")
+            .join(",");
+
+        db.prepare(`
+          DELETE FROM purchase_order_items
+          WHERE
+            purchase_order_id IN (
+              ${placeholders}
+            )
+            AND purchase_order_id IN (
+              SELECT id
+              FROM purchase_orders
+              WHERE organisation_id = ?
+            )
+        `).run(
+          ...poIds,
+          organisationId
+        );
+
+        db.prepare(`
+          DELETE FROM purchase_orders
+          WHERE
+            id IN (
+              ${placeholders}
+            )
+            AND organisation_id = ?
+        `).run(
+          ...poIds,
+          organisationId
+        );
+      }
 
       db.prepare(`
-        DELETE FROM approvals
-        WHERE invoice_id IN (${placeholders})
-      `).run(...invoiceIds);
+        DELETE FROM suppliers
+        WHERE
+          supplier_code LIKE ?
+          AND organisation_id = ?
+      `).run(
+        `${SCENARIO_PREFIX}%`,
+        organisationId
+      );
 
       db.prepare(`
-        DELETE FROM exceptions
-        WHERE invoice_id IN (${placeholders})
-      `).run(...invoiceIds);
-
-      db.prepare(`
-        DELETE FROM invoice_matches
-        WHERE invoice_id IN (${placeholders})
-      `).run(...invoiceIds);
-
-      db.prepare(`
-        DELETE FROM invoice_line_items
-        WHERE invoice_id IN (${placeholders})
-      `).run(...invoiceIds);
-
-      db.prepare(`
-        DELETE FROM invoices
-        WHERE id IN (${placeholders})
-      `).run(...invoiceIds);
-    }
-
-    if (documentIds.length) {
-      const placeholders =
-        documentIds
-          .map(() => "?")
-          .join(",");
-
-      db.prepare(`
-        DELETE FROM documents
-        WHERE id IN (${placeholders})
-      `).run(...documentIds);
-    }
-
-    const poRows = db.prepare(`
-      SELECT id
-      FROM purchase_orders
-      WHERE po_number LIKE ?
-    `).all(`${SCENARIO_PREFIX}%`);
-
-    const poIds =
-      poRows.map((row) => row.id);
-
-    if (poIds.length) {
-      const placeholders =
-        poIds
-          .map(() => "?")
-          .join(",");
-
-      db.prepare(`
-        DELETE FROM purchase_order_items
-        WHERE purchase_order_id IN (${placeholders})
-      `).run(...poIds);
-
-      db.prepare(`
-        DELETE FROM purchase_orders
-        WHERE id IN (${placeholders})
-      `).run(...poIds);
-    }
-
-    db.prepare(`
-      DELETE FROM suppliers
-      WHERE supplier_code LIKE ?
-    `).run(`${SCENARIO_PREFIX}%`);
-
-    db.prepare(`
-      DELETE FROM audit_logs
-      WHERE action LIKE 'SCENARIO_%'
-    `).run();
-  });
+        DELETE FROM audit_logs
+        WHERE
+          action LIKE 'SCENARIO_%'
+          AND organisation_id = ?
+      `).run(
+        organisationId
+      );
+    });
 
   transaction();
 
@@ -686,85 +1165,165 @@ function removeScenarioData() {
   };
 }
 
+async function runScenarios(
+  organisationId
+) {
+  requireOrganisationId(
+    organisationId
+  );
 
-async function runScenarios() {
   /*
-   * Reset only APPA-SCN-* synthetic scenario data.
-   *
-   * Duplicate sequencing is intentional:
-   *
-   * 1. Create all synthetic fixtures.
-   * 2. Temporarily remove the duplicate invoice.
-   * 3. Process CLEAN_MATCH first.
-   * 4. Process normal exception scenarios.
-   * 5. Re-create DUPLICATE_INVOICE only after the clean
-   *    invoice has completed successfully.
-   *
-   * This models the real business sequence: an original
-   * invoice arrives first, then a duplicate arrives later.
+   * Reset only the selected organisation's
+   * APPA-SCN-* synthetic scenario data.
    */
+  removeScenarioData(
+    organisationId
+  );
 
-  removeScenarioData();
-
-  const seeded = seedScenarios();
+  const seeded =
+    seedScenarios(
+      organisationId
+    );
 
   const duplicateSeedId =
-    seeded.scenarios.duplicateInvoice.invoiceId;
+    seeded.scenarios
+      .duplicateInvoice
+      .invoiceId;
 
-  /*
-   * Remove only the pre-created duplicate fixture before
-   * matching the original invoice.
-   */
-  const duplicateDocument = db.prepare(`
-    SELECT
-      i.document_id AS documentId
-    FROM invoices i
-    WHERE i.id = ?
-  `).get(duplicateSeedId);
+  const duplicateDocument =
+    db.prepare(`
+      SELECT
+        i.document_id AS documentId
 
-  if (duplicateSeedId) {
+      FROM invoices i
+
+      INNER JOIN documents d
+        ON d.id =
+           i.document_id
+
+      WHERE
+        i.id = ?
+        AND d.organisation_id = ?
+    `).get(
+      duplicateSeedId,
+      organisationId
+    );
+
+  if (
+    duplicateSeedId &&
+    duplicateDocument
+  ) {
     db.prepare(`
       DELETE FROM approvals
-      WHERE invoice_id = ?
-    `).run(duplicateSeedId);
+      WHERE
+        invoice_id = ?
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id =
+               i.document_id
+          WHERE
+            d.organisation_id = ?
+        )
+    `).run(
+      duplicateSeedId,
+      organisationId
+    );
 
     db.prepare(`
       DELETE FROM exceptions
-      WHERE invoice_id = ?
-    `).run(duplicateSeedId);
+      WHERE
+        invoice_id = ?
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id =
+               i.document_id
+          WHERE
+            d.organisation_id = ?
+        )
+    `).run(
+      duplicateSeedId,
+      organisationId
+    );
 
     db.prepare(`
       DELETE FROM invoice_matches
-      WHERE invoice_id = ?
-    `).run(duplicateSeedId);
+      WHERE
+        invoice_id = ?
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id =
+               i.document_id
+          WHERE
+            d.organisation_id = ?
+        )
+    `).run(
+      duplicateSeedId,
+      organisationId
+    );
 
     db.prepare(`
       DELETE FROM invoice_line_items
-      WHERE invoice_id = ?
-    `).run(duplicateSeedId);
+      WHERE
+        invoice_id = ?
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id =
+               i.document_id
+          WHERE
+            d.organisation_id = ?
+        )
+    `).run(
+      duplicateSeedId,
+      organisationId
+    );
 
     db.prepare(`
       DELETE FROM invoices
-      WHERE id = ?
-    `).run(duplicateSeedId);
-  }
+      WHERE
+        id = ?
+        AND document_id IN (
+          SELECT id
+          FROM documents
+          WHERE organisation_id = ?
+        )
+    `).run(
+      duplicateSeedId,
+      organisationId
+    );
 
-  if (duplicateDocument?.documentId) {
     db.prepare(`
       DELETE FROM documents
-      WHERE id = ?
+      WHERE
+        id = ?
+        AND organisation_id = ?
     `).run(
-      duplicateDocument.documentId
+      duplicateDocument
+        .documentId,
+      organisationId
     );
   }
 
   const executions = [];
 
-  async function execute(name, invoiceId) {
+  async function execute(
+    name,
+    invoiceId
+  ) {
     try {
       const result =
         await Promise.resolve(
-          matchInvoice(invoiceId)
+          matchInvoice(
+            invoiceId,
+            organisationId
+          )
         );
 
       executions.push({
@@ -786,62 +1345,78 @@ async function runScenarios() {
         invoiceId,
         executed: false,
         result: null,
-        error: error.message,
+        error:
+          error.message,
       });
 
       return null;
     }
   }
 
-  /*
-   * Original invoice arrives first.
-   */
   await execute(
     "CLEAN_MATCH",
-    seeded.scenarios.cleanMatch.invoiceId
+    seeded.scenarios
+      .cleanMatch.invoiceId
   );
 
-  /*
-   * Independent business exception cases.
-   */
   await execute(
     "AMOUNT_MISMATCH",
-    seeded.scenarios.amountMismatch.invoiceId
+    seeded.scenarios
+      .amountMismatch.invoiceId
   );
 
   await execute(
     "MISSING_PO",
-    seeded.scenarios.missingPO.invoiceId
+    seeded.scenarios
+      .missingPO.invoiceId
   );
 
-  /*
-   * Duplicate arrives AFTER the original invoice.
-   */
-  const supplier = db.prepare(`
-    SELECT *
-    FROM suppliers
-    WHERE supplier_code = ?
-  `).get(
-    `${SCENARIO_PREFIX}SUPPLIER`
-  );
+  const supplier =
+    db.prepare(`
+      SELECT *
+      FROM suppliers
+      WHERE
+        supplier_code = ?
+        AND organisation_id = ?
+    `).get(
+      `${SCENARIO_PREFIX}SUPPLIER`,
+      organisationId
+    );
 
-  const purchaseOrder = db.prepare(`
-    SELECT *
-    FROM purchase_orders
-    WHERE po_number = ?
-  `).get(
-    `${SCENARIO_PREFIX}PO-1001`
-  );
+  const purchaseOrder =
+    db.prepare(`
+      SELECT po.*
 
-  if (!supplier || !purchaseOrder) {
+      FROM purchase_orders po
+
+      INNER JOIN suppliers s
+        ON s.id =
+           po.supplier_id
+
+      WHERE
+        po.po_number = ?
+        AND po.organisation_id = ?
+        AND s.organisation_id = ?
+    `).get(
+      `${SCENARIO_PREFIX}PO-1001`,
+      organisationId,
+      organisationId
+    );
+
+  if (
+    !supplier ||
+    !purchaseOrder
+  ) {
     throw new Error(
-      "Scenario supplier or purchase order missing before duplicate test"
+      "Scenario supplier or purchase order missing before duplicate test."
     );
   }
 
   const duplicateInvoiceId =
     createInvoice({
-      scenario: "DUPLICATE_INVOICE",
+      organisationId,
+      scenario:
+        "DUPLICATE_INVOICE",
       invoiceNumber:
         `${SCENARIO_PREFIX}INV-CLEAN-001`,
       supplier,
@@ -859,24 +1434,33 @@ async function runScenarios() {
   );
 
   const results =
-    getScenarioResults();
+    getScenarioResults(
+      organisationId
+    );
 
   const passed =
     results.filter(
-      (item) => item.passed
+      (item) =>
+        item.passed
     ).length;
 
   const summary = {
-    total: results.length,
+    total:
+      results.length,
+
     passed,
+
     failed:
-      results.length - passed,
+      results.length -
+      passed,
+
     allPassed:
       results.length === 4 &&
       passed === 4,
   };
 
   audit(
+    organisationId,
     "SCENARIO_TEST_RUN",
     "system",
     "APPA_WORKFLOW_SCENARIOS",
@@ -884,12 +1468,12 @@ async function runScenarios() {
   );
 
   return {
-    executionOrder: executions,
+    executionOrder:
+      executions,
     summary,
     results,
   };
 }
-
 
 module.exports = {
   runScenarios,

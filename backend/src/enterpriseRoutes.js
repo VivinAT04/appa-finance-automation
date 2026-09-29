@@ -2117,48 +2117,98 @@ router.post(
 
 /* APPA SYNTHETIC WORKFLOW SCENARIOS */
 
-/*
- * scenarioService still contains global development/test
- * data operations. Until that service is organisation-aware,
- * these routes must not invoke it.
- */
-
-function scenarioTenantMigrationRequired(
-  _req,
-  res
-) {
-  return res.status(503).json({
-    success: false,
-    code:
-      "SCENARIO_TENANT_MIGRATION_REQUIRED",
-    message:
-      "Synthetic scenario operations are temporarily unavailable while organisation isolation is being completed.",
-  });
-}
-
 router.post(
   "/scenarios/run",
-  scenarioTenantMigrationRequired
+  async (req, res, next) => {
+    try {
+      const result =
+        await runScenarios(
+          req.organisation.id
+        );
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 router.post(
   "/scenarios/seed",
-  scenarioTenantMigrationRequired
+  (req, res, next) => {
+    try {
+      const result =
+        seedScenarios(
+          req.organisation.id
+        );
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 router.get(
   "/scenarios",
-  scenarioTenantMigrationRequired
+  (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+
+        invoices:
+          getScenarioInvoices(
+            req.organisation.id
+          ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 router.get(
   "/scenarios/results",
-  scenarioTenantMigrationRequired
+  (req, res, next) => {
+    try {
+      const results =
+        getScenarioResults(
+          req.organisation.id
+        );
+
+      res.json({
+        success: true,
+        results,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 router.delete(
   "/scenarios",
-  scenarioTenantMigrationRequired
+  (req, res, next) => {
+    try {
+      const result =
+        removeScenarioData(
+          req.organisation.id
+        );
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 module.exports = router;
