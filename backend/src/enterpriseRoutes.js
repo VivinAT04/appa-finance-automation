@@ -220,6 +220,146 @@ router.get(
   }
 );
 
+
+/* =========================================================
+   FINANCE OPERATIONS SUMMARY
+   ========================================================= */
+
+router.get(
+  "/operations-summary",
+  (_req, res, next) => {
+    try {
+      const openExceptions = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM exceptions
+        WHERE status = 'Open'
+      `).get().count;
+
+      const pendingApprovals = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM invoices i
+        LEFT JOIN invoice_matches m
+          ON m.invoice_id = i.id
+        WHERE
+          m.match_status = 'Matched'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM exceptions e
+            WHERE
+              e.invoice_id = i.id
+              AND e.status = 'Open'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM approvals a
+            WHERE a.invoice_id = i.id
+          )
+      `).get().count;
+
+      const exceptionInvoices = db.prepare(`
+        SELECT COUNT(DISTINCT invoice_id) AS count
+        FROM exceptions
+        WHERE status = 'Open'
+      `).get().count;
+
+      const latestAutomation = db.prepare(`
+        SELECT
+          id,
+          process_name AS processName,
+          source,
+          status,
+          started_at AS startedAt,
+          completed_at AS completedAt
+        FROM automation_runs
+        ORDER BY started_at DESC
+        LIMIT 1
+      `).get() || null;
+
+      res.json({
+        success: true,
+        summary: {
+          pendingApprovals,
+          openExceptions,
+          exceptionInvoices,
+          automationStatus:
+            latestAutomation?.status || "Idle",
+          latestAutomation,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  "/approvals/pending",
+  (_req, res, next) => {
+    try {
+      const pending = db.prepare(`
+        SELECT
+          i.id AS invoiceId,
+          i.invoice_number AS invoiceNumber,
+          i.supplier_name AS supplierName,
+          i.currency,
+          i.total_amount AS totalAmount,
+          i.purchase_order_number AS purchaseOrderNumber,
+          i.invoice_date AS invoiceDate,
+          i.due_date AS dueDate,
+          i.extraction_confidence AS extractionConfidence,
+          i.validation_status AS validationStatus,
+
+          m.match_score AS matchScore,
+          m.match_status AS matchStatus,
+          m.variance_amount AS varianceAmount,
+          m.updated_at AS matchedAt,
+
+          (
+            SELECT COUNT(*)
+            FROM exceptions e
+            WHERE
+              e.invoice_id = i.id
+              AND e.status = 'Open'
+          ) AS openExceptionCount
+
+        FROM invoices i
+
+        JOIN invoice_matches m
+          ON m.invoice_id = i.id
+
+        WHERE
+          m.match_status = 'Matched'
+
+          AND NOT EXISTS (
+            SELECT 1
+            FROM exceptions e
+            WHERE
+              e.invoice_id = i.id
+              AND e.status = 'Open'
+          )
+
+          AND NOT EXISTS (
+            SELECT 1
+            FROM approvals a
+            WHERE a.invoice_id = i.id
+          )
+
+        ORDER BY
+          COALESCE(i.due_date, i.created_at) ASC,
+          i.created_at ASC
+      `).all();
+
+      res.json({
+        success: true,
+        total: pending.length,
+        pending,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 /* =========================================================
    APPROVALS
    ========================================================= */
@@ -295,6 +435,51 @@ router.post(
           "Invoice not found.",
       });
     }
+
+    const openExceptionCount =
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM exceptions
+        WHERE
+          invoice_id = ?
+          AND status = 'Open'
+      `).get(
+        req.params.invoiceId
+      ).count;
+
+    if (
+      decision === "Approved" &&
+      openExceptionCount > 0
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "OPEN_EXCEPTIONS",
+        message:
+          `Invoice cannot be approved while ${openExceptionCount} unresolved exception${openExceptionCount === 1 ? "" : "s"} remain.`,
+        openExceptionCount,
+      });
+    }
+
+    const currentMatch =
+      getMatch(
+        req.params.invoiceId
+      );
+
+    if (
+      decision === "Approved" &&
+      (
+        !currentMatch ||
+        currentMatch.matchStatus !== "Matched"
+      )
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "MATCH_REQUIRED",
+        message:
+          "Invoice must have a successful PO match before manual approval.",
+      });
+    }
+
 
     const id =
       randomUUID();

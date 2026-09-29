@@ -17,6 +17,7 @@ import {
   getInvoices,
   getPurchaseOrders,
   getApprovals,
+  getPendingApprovals,
   getExceptions,
   getAutomationRuns,
   getReports,
@@ -27,6 +28,10 @@ import {
   runAPCycle,
   updateSetting,
 } from "../api";
+
+import InvoiceOperations from "./InvoiceOperations";
+import ApprovalOperations from "./ApprovalOperations";
+import ExceptionWorkbench from "./ExceptionWorkbench";
 
 import "./EnterpriseModule.css";
 
@@ -152,9 +157,21 @@ export default function EnterpriseModule({ module }) {
           setRows(await getPurchaseOrders());
           break;
 
-        case "Approvals":
-          setRows(await getApprovals());
+        case "Approvals": {
+          const [
+            pendingApprovals,
+            approvalHistory,
+          ] = await Promise.all([
+            getPendingApprovals(),
+            getApprovals(),
+          ]);
+
+          setRows({
+            pending: pendingApprovals,
+            history: approvalHistory,
+          });
           break;
+        }
 
         case "Exceptions":
           setRows(await getExceptions());
@@ -213,15 +230,11 @@ export default function EnterpriseModule({ module }) {
     }
   }
 
-  async function manualDecision(invoiceId, decision) {
-    const comments =
-      window.prompt(
-        `${decision} comments:`,
-        decision === "Approved"
-          ? "Reviewed and approved."
-          : "Rejected during manual review."
-      ) || "";
-
+  async function manualDecision(
+    invoiceId,
+    decision,
+    comments = ""
+  ) {
     try {
       setWorking(invoiceId);
       setMessage("");
@@ -248,11 +261,10 @@ export default function EnterpriseModule({ module }) {
     }
   }
 
-  async function resolve(id) {
-    const resolution = window.prompt(
-      "Enter the exception resolution:"
-    );
-
+  async function resolve(
+    id,
+    resolution
+  ) {
     if (!resolution?.trim()) return;
 
     try {
@@ -360,7 +372,7 @@ export default function EnterpriseModule({ module }) {
       )}
 
       {module === "Invoices" && (
-        <InvoicesView
+        <InvoiceOperations
           rows={rows}
           working={working}
           onRefresh={load}
@@ -376,8 +388,9 @@ export default function EnterpriseModule({ module }) {
       )}
 
       {module === "Approvals" && (
-        <ApprovalsView
-          rows={rows}
+        <ApprovalOperations
+          pending={rows?.pending || []}
+          history={rows?.history || []}
           working={working}
           onRefresh={load}
           onDecision={manualDecision}
@@ -385,7 +398,7 @@ export default function EnterpriseModule({ module }) {
       )}
 
       {module === "Exceptions" && (
-        <ExceptionsView
+        <ExceptionWorkbench
           rows={rows}
           working={working}
           onRefresh={load}

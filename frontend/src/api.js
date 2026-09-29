@@ -293,3 +293,22 @@ export async function runWorkflowScenarios() {
 
   return response.data;
 }
+
+
+/* APPA FINANCE OPERATIONS */
+
+export async function getPendingApprovals() {
+  const response = await api.get(
+    "/enterprise/approvals/pending"
+  );
+
+  return response.data.pending;
+}
+
+export async function getOperationsSummary() {
+  const response = await api.get(
+    "/enterprise/operations-summary"
+  );
+
+  return response.data.summary;
+}

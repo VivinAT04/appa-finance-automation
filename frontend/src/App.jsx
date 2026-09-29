@@ -23,7 +23,9 @@ import {
 } from "lucide-react";
 
 import appaLogo from "./assets/appa-logo.png";
-import { getDashboardData } from "./api";
+import { getDashboardData,
+  getOperationsSummary
+} from "./api";
 import Documents from "./components/Documents";
 import EnterpriseModule from "./components/EnterpriseModule";
 import AuditLogs from "./components/AuditLogs";
@@ -35,9 +37,9 @@ const navigation = [
   { name: "Documents", icon: FileText },
   { name: "Invoices", icon: ReceiptText },
   { name: "Purchase Orders", icon: ShoppingCart },
-  { name: "Approvals", icon: CheckCircle2, count: 4 },
+  { name: "Approvals", icon: CheckCircle2, count: operationsSummary.pendingApprovals },
   { name: "Automation", icon: Bot },
-  { name: "Exceptions", icon: TriangleAlert, count: 3 },
+  { name: "Exceptions", icon: TriangleAlert, count: operationsSummary.openExceptions },
   { name: "Audit Logs", icon: ScrollText },
   { name: "Reports", icon: BarChart3 },
 ];
@@ -56,6 +58,42 @@ function Status({ value }) {
 }
 
 function App() {
+
+  const [operationsSummary, setOperationsSummary] =
+    useState({
+      pendingApprovals: 0,
+      openExceptions: 0,
+      exceptionInvoices: 0,
+      automationStatus: "Idle",
+    });
+
+  async function refreshOperationsSummary() {
+    try {
+      const summary =
+        await getOperationsSummary();
+
+      setOperationsSummary(summary);
+    } catch (error) {
+      console.error(
+        "Could not refresh AP operations summary:",
+        error
+      );
+    }
+  }
+
+  useEffect(() => {
+    refreshOperationsSummary();
+
+    const timer = window.setInterval(
+      refreshOperationsSummary,
+      15000
+    );
+
+    return () =>
+      window.clearInterval(timer);
+  }, []);
+
+
   const [active, setActive] = useState("Dashboard");
 
   const [dashboard, setDashboard] = useState(null);
