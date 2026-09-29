@@ -269,7 +269,7 @@ function App() {
           <div className="top-actions">
             <div className="environment">
               <span className="environment-dot" />
-              Automation online
+              APPA engine ready
             </div>
 
             <button className="icon-button">
@@ -322,6 +322,7 @@ function App() {
           ) : [
             "Invoices",
             "Purchase Orders",
+            "Suppliers",
             "Approvals",
             "Automation",
             "Exceptions",

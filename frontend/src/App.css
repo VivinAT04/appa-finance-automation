@@ -1290,3 +1290,1879 @@ td {
   border-radius: 50%;
   background: #fff;
 }
+
+/* ============================================================
+   APPA BLOCK 11 — PROFESSIONAL UI / MOTION SYSTEM
+   ============================================================ */
+
+:root {
+  --appa-motion-fast: 160ms;
+  --appa-motion-base: 240ms;
+  --appa-motion-slow: 420ms;
+  --appa-ease:
+    cubic-bezier(0.22, 1, 0.36, 1);
+  --appa-ease-soft:
+    cubic-bezier(0.4, 0, 0.2, 1);
+
+  --appa-shadow-soft:
+    0 1px 2px rgba(15, 35, 25, 0.03),
+    0 8px 24px rgba(15, 35, 25, 0.035);
+
+  --appa-shadow-hover:
+    0 2px 4px rgba(15, 35, 25, 0.04),
+    0 16px 36px rgba(15, 35, 25, 0.075);
+
+  --appa-shadow-button:
+    0 7px 18px rgba(30, 91, 57, 0.16);
+}
+
+/* ---------- APP SHELL ---------- */
+
+.app-shell {
+  animation:
+    appa-shell-enter
+    500ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-shell-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- SIDEBAR ---------- */
+
+.sidebar {
+  box-shadow:
+    8px 0 30px rgba(5, 20, 13, 0.025);
+}
+
+.brand-logo {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) ease;
+}
+
+.brand:hover .brand-logo {
+  transform:
+    translateY(-1px)
+    scale(1.025);
+}
+
+.workspace-select {
+  transition:
+    background var(--appa-motion-fast) ease,
+    border-color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.workspace-select:hover {
+  transform: translateY(-1px);
+}
+
+.workspace-select svg {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.workspace-select:hover svg {
+  transform: translateY(1px);
+}
+
+.nav-item {
+  position: relative;
+  overflow: hidden;
+
+  transition:
+    color var(--appa-motion-fast) ease,
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.nav-item::before {
+  content: "";
+  position: absolute;
+
+  left: 0;
+  top: 50%;
+
+  width: 3px;
+  height: 0;
+
+  border-radius:
+    0 999px 999px 0;
+
+  background: #47ad70;
+
+  transform:
+    translateY(-50%);
+
+  opacity: 0;
+
+  transition:
+    height var(--appa-motion-base) var(--appa-ease),
+    opacity var(--appa-motion-fast) ease;
+}
+
+.nav-item:hover {
+  transform: translateX(2px);
+}
+
+.nav-item svg {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    color var(--appa-motion-fast) ease;
+}
+
+.nav-item:hover svg {
+  transform: scale(1.08);
+}
+
+.nav-item-active::before {
+  height: 22px;
+  opacity: 1;
+}
+
+.nav-item-active svg {
+  transform: scale(1.04);
+}
+
+.nav-count {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    background var(--appa-motion-fast) ease;
+}
+
+.nav-item:hover .nav-count {
+  transform: scale(1.06);
+}
+
+.profile {
+  transition:
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.profile:hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- TOP BAR ---------- */
+
+.topbar {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.search {
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.search:focus-within {
+  border-color:
+    rgba(43, 111, 71, 0.35);
+
+  box-shadow:
+    0 0 0 4px
+    rgba(47, 126, 80, 0.07);
+
+  background: #ffffff;
+
+  transform:
+    translateY(-1px);
+}
+
+.search svg {
+  transition:
+    color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.search:focus-within svg {
+  color: #276d46;
+  transform: scale(1.06);
+}
+
+.shortcut {
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    background var(--appa-motion-fast) ease;
+}
+
+.environment {
+  transition:
+    background var(--appa-motion-fast) ease,
+    border-color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.environment:hover {
+  transform: translateY(-1px);
+}
+
+.environment-dot {
+  box-shadow:
+    0 0 0 0
+    rgba(43, 169, 90, 0.28);
+
+  animation:
+    appa-live-pulse
+    2.6s
+    ease-out
+    infinite;
+}
+
+@keyframes appa-live-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0
+      rgba(43, 169, 90, 0.28);
+  }
+
+  65% {
+    box-shadow:
+      0 0 0 5px
+      rgba(43, 169, 90, 0);
+  }
+
+  100% {
+    box-shadow:
+      0 0 0 0
+      rgba(43, 169, 90, 0);
+  }
+}
+
+.icon-button,
+.user-button {
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    background var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.icon-button:hover,
+.user-button:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 7px 18px
+    rgba(21, 55, 37, 0.08);
+}
+
+.icon-button:active,
+.user-button:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ---------- PAGE ENTRY ---------- */
+
+.page-heading {
+  animation:
+    appa-heading-enter
+    440ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-heading-enter {
+  from {
+    opacity: 0;
+    transform:
+      translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(0);
+  }
+}
+
+.page-heading h1 {
+  letter-spacing: -0.035em;
+}
+
+.eyebrow {
+  letter-spacing: 0.14em;
+}
+
+.heading-actions {
+  animation:
+    appa-actions-enter
+    500ms
+    60ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-actions-enter {
+  from {
+    opacity: 0;
+    transform:
+      translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateX(0);
+  }
+}
+
+/* ---------- BUTTON SYSTEM ---------- */
+
+.primary-button,
+.secondary-button,
+.text-button {
+  transition:
+    background var(--appa-motion-fast) ease,
+    color var(--appa-motion-fast) ease,
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.primary-button:hover {
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    var(--appa-shadow-button);
+}
+
+.secondary-button:hover {
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    0 7px 18px
+    rgba(20, 45, 30, 0.07);
+}
+
+.primary-button:active,
+.secondary-button:active {
+  transform:
+    translateY(0)
+    scale(0.98);
+}
+
+.primary-button svg,
+.secondary-button svg,
+.text-button svg {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.primary-button:hover svg {
+  transform:
+    rotate(90deg)
+    scale(1.04);
+}
+
+.secondary-button:hover svg {
+  transform:
+    translateY(-2px);
+}
+
+.text-button:hover svg {
+  transform:
+    translate(2px, -2px);
+}
+
+/* ---------- DASHBOARD METRICS ---------- */
+
+.metric-grid {
+  perspective: 1000px;
+}
+
+.metric-card {
+  position: relative;
+  overflow: hidden;
+
+  box-shadow:
+    var(--appa-shadow-soft);
+
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) ease,
+    border-color var(--appa-motion-fast) ease,
+    background var(--appa-motion-fast) ease;
+
+  animation:
+    appa-card-enter
+    480ms
+    var(--appa-ease)
+    both;
+}
+
+.metric-card:nth-child(1) {
+  animation-delay: 40ms;
+}
+
+.metric-card:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.metric-card:nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.metric-card:nth-child(4) {
+  animation-delay: 190ms;
+}
+
+@keyframes appa-card-enter {
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(12px)
+      scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+.metric-card::after {
+  content: "";
+
+  position: absolute;
+  inset:
+    0 0 auto 0;
+
+  height: 2px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(48, 128, 81, 0.45),
+      transparent
+    );
+
+  transform:
+    scaleX(0);
+
+  transform-origin:
+    center;
+
+  transition:
+    transform
+    360ms
+    var(--appa-ease);
+}
+
+.metric-card:hover {
+  transform:
+    translateY(-4px);
+
+  border-color:
+    rgba(45, 103, 68, 0.18);
+
+  box-shadow:
+    var(--appa-shadow-hover);
+}
+
+.metric-card:hover::after {
+  transform:
+    scaleX(1);
+}
+
+.metric-icon {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    background var(--appa-motion-fast) ease;
+}
+
+.metric-card:hover .metric-icon {
+  transform:
+    translateY(-2px)
+    rotate(-3deg)
+    scale(1.05);
+}
+
+.metric-value {
+  letter-spacing: -0.04em;
+
+  transition:
+    color var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.metric-card:hover .metric-value {
+  transform:
+    translateY(-1px);
+}
+
+/* ---------- PANELS ---------- */
+
+.panel {
+  box-shadow:
+    var(--appa-shadow-soft);
+
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+
+  animation:
+    appa-panel-enter
+    520ms
+    var(--appa-ease)
+    both;
+}
+
+.dashboard-grid .panel:nth-child(1) {
+  animation-delay: 150ms;
+}
+
+.dashboard-grid .panel:nth-child(2) {
+  animation-delay: 210ms;
+}
+
+.bottom-grid .panel:nth-child(1) {
+  animation-delay: 250ms;
+}
+
+.bottom-grid .panel:nth-child(2) {
+  animation-delay: 300ms;
+}
+
+@keyframes appa-panel-enter {
+  from {
+    opacity: 0;
+    transform:
+      translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(0);
+  }
+}
+
+.panel:hover {
+  border-color:
+    rgba(44, 100, 66, 0.15);
+
+  box-shadow:
+    0 2px 4px
+      rgba(15, 35, 25, 0.025),
+    0 12px 30px
+      rgba(15, 35, 25, 0.045);
+}
+
+.panel-heading h2 {
+  letter-spacing:
+    -0.018em;
+}
+
+/* ---------- TABLES ---------- */
+
+.table-wrap tbody tr {
+  transition:
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.table-wrap tbody tr:hover {
+  background:
+    rgba(40, 107, 67, 0.027);
+}
+
+.table-wrap tbody td {
+  transition:
+    color var(--appa-motion-fast) ease;
+}
+
+.table-wrap tbody tr:hover .invoice-number {
+  color: #1f6a42;
+}
+
+.status {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) ease;
+}
+
+.table-wrap tbody tr:hover .status {
+  transform:
+    translateX(2px);
+}
+
+.status-dot {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.status:hover .status-dot {
+  transform: scale(1.35);
+}
+
+/* ---------- AUTOMATION HEALTH ---------- */
+
+.live-indicator {
+  transition:
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.live-indicator:hover {
+  transform: translateY(-1px);
+}
+
+.live-indicator > span {
+  animation:
+    appa-live-dot
+    2.3s
+    ease-in-out
+    infinite;
+}
+
+@keyframes appa-live-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+}
+
+.score-ring {
+  position: relative;
+
+  transition:
+    transform
+    400ms
+    var(--appa-ease),
+    filter
+    300ms
+    ease;
+
+  animation:
+    appa-score-enter
+    760ms
+    220ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-score-enter {
+  from {
+    opacity: 0;
+    transform:
+      scale(0.82)
+      rotate(-10deg);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      scale(1)
+      rotate(0);
+  }
+}
+
+.score-ring:hover {
+  transform:
+    scale(1.045);
+
+  filter:
+    drop-shadow(
+      0 8px 12px
+      rgba(31, 105, 65, 0.09)
+    );
+}
+
+.score-ring strong {
+  letter-spacing: -0.045em;
+}
+
+.automation-row {
+  transition:
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.automation-row:hover {
+  background:
+    rgba(40, 107, 67, 0.025);
+
+  transform:
+    translateX(3px);
+}
+
+.automation-row-icon {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    background var(--appa-motion-fast) ease;
+}
+
+.automation-row:hover .automation-row-icon {
+  transform:
+    scale(1.06)
+    rotate(-3deg);
+}
+
+/* ---------- CHART ---------- */
+
+.chart-column {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.chart-column:hover {
+  transform:
+    translateY(-3px);
+}
+
+.bar {
+  transform-origin: bottom;
+
+  animation:
+    appa-bar-grow
+    700ms
+    var(--appa-ease)
+    both;
+
+  transition:
+    filter var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.chart-column:nth-child(1) .bar {
+  animation-delay: 220ms;
+}
+
+.chart-column:nth-child(2) .bar {
+  animation-delay: 270ms;
+}
+
+.chart-column:nth-child(3) .bar {
+  animation-delay: 320ms;
+}
+
+.chart-column:nth-child(4) .bar {
+  animation-delay: 370ms;
+}
+
+.chart-column:nth-child(5) .bar {
+  animation-delay: 420ms;
+}
+
+.chart-column:nth-child(6) .bar {
+  animation-delay: 470ms;
+}
+
+.chart-column:nth-child(7) .bar {
+  animation-delay: 520ms;
+}
+
+@keyframes appa-bar-grow {
+  from {
+    transform:
+      scaleY(0);
+  }
+
+  to {
+    transform:
+      scaleY(1);
+  }
+}
+
+.chart-column:hover .bar {
+  filter:
+    brightness(0.94);
+
+  transform:
+    scaleX(1.05);
+}
+
+/* ---------- ATTENTION ITEMS ---------- */
+
+.attention-item {
+  transition:
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.live-attention-button:hover {
+  background:
+    rgba(170, 112, 30, 0.035);
+
+  transform:
+    translateX(3px);
+}
+
+.attention-icon {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    background var(--appa-motion-fast) ease;
+}
+
+.live-attention-button:hover .attention-icon {
+  transform:
+    scale(1.06)
+    rotate(-3deg);
+}
+
+.live-attention-button > svg:last-child {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.live-attention-button:hover > svg:last-child {
+  transform:
+    translate(2px, -2px);
+}
+
+/* ---------- LOADING / ERROR ---------- */
+
+.live-dashboard-state {
+  animation:
+    appa-state-enter
+    320ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-state-enter {
+  from {
+    opacity: 0;
+    transform:
+      translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(0);
+  }
+}
+
+/* ---------- GLOBAL ENTERPRISE POLISH ---------- */
+
+.enterprise-card,
+.invoice-card,
+.procurement-card,
+.supplier-card,
+.reporting-card,
+.automation-card {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) ease,
+    border-color var(--appa-motion-fast) ease;
+}
+
+.enterprise-card:hover,
+.invoice-card:hover,
+.procurement-card:hover,
+.supplier-card:hover,
+.reporting-card:hover,
+.automation-card:hover {
+  transform:
+    translateY(-3px);
+
+  box-shadow:
+    var(--appa-shadow-hover);
+}
+
+.enterprise-table tbody tr,
+.invoice-table tbody tr {
+  transition:
+    background var(--appa-motion-fast) ease;
+}
+
+.enterprise-table tbody tr:hover,
+.invoice-table tbody tr:hover {
+  background:
+    rgba(40, 107, 67, 0.028);
+}
+
+/* ---------- KEYBOARD FOCUS ---------- */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline:
+    2px solid
+    rgba(41, 117, 72, 0.55);
+
+  outline-offset: 2px;
+}
+
+/* ---------- MOBILE MOTION SAFETY ---------- */
+
+@media (max-width: 900px) {
+  .metric-card:hover,
+  .panel:hover,
+  .enterprise-card:hover,
+  .invoice-card:hover,
+  .procurement-card:hover,
+  .supplier-card:hover,
+  .reporting-card:hover,
+  .automation-card:hover {
+    transform: none;
+  }
+}
+
+/* ---------- ACCESSIBILITY ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .page-heading,
+  .heading-actions,
+  .metric-card,
+  .panel,
+  .score-ring,
+  .bar,
+  .environment-dot,
+  .live-indicator > span {
+    animation: none !important;
+  }
+
+  .brand-logo,
+  .workspace-select,
+  .workspace-select svg,
+  .nav-item,
+  .nav-item::before,
+  .nav-item svg,
+  .nav-count,
+  .profile,
+  .search,
+  .search svg,
+  .shortcut,
+  .environment,
+  .icon-button,
+  .user-button,
+  .primary-button,
+  .secondary-button,
+  .text-button,
+  .primary-button svg,
+  .secondary-button svg,
+  .text-button svg,
+  .metric-card,
+  .metric-card::after,
+  .metric-icon,
+  .metric-value,
+  .panel,
+  .table-wrap tbody tr,
+  .table-wrap tbody td,
+  .status,
+  .status-dot,
+  .live-indicator,
+  .score-ring,
+  .automation-row,
+  .automation-row-icon,
+  .chart-column,
+  .bar,
+  .attention-item,
+  .attention-icon,
+  .live-attention-button > svg:last-child,
+  .enterprise-card,
+  .invoice-card,
+  .procurement-card,
+  .supplier-card,
+  .reporting-card,
+  .automation-card,
+  .enterprise-table tbody tr,
+  .invoice-table tbody tr {
+    transition: none !important;
+  }
+
+  .nav-item:hover,
+  .metric-card:hover,
+  .panel:hover,
+  .score-ring:hover,
+  .automation-row:hover,
+  .chart-column:hover,
+  .live-attention-button:hover,
+  .enterprise-card:hover,
+  .invoice-card:hover,
+  .procurement-card:hover,
+  .supplier-card:hover,
+  .reporting-card:hover,
+  .automation-card:hover {
+    transform: none !important;
+  }
+}
+
+/* ============================================================
+   BLOCK 11 — AUTOMATION HEALTH RING CENTERING
+   ============================================================ */
+
+.score-ring {
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.score-ring strong {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin: 0;
+  padding: 0;
+
+  line-height: 1;
+  text-align: center;
+
+  transform: translateY(0);
+}
+
+/* ============================================================
+   BLOCK 11 — AUTOMATION RING FINAL VALUE ALIGNMENT
+   Keep 10.0 and % together as one centred value.
+   ============================================================ */
+
+.score-ring > div {
+  position: relative;
+  z-index: 1;
+
+  display: flex;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+
+  border-radius: 50%;
+  background: #ffffff;
+
+  line-height: 1;
+}
+
+.score-ring strong {
+  position: static;
+  inset: auto;
+
+  display: inline-block;
+
+  margin: 0;
+  padding: 0;
+
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+
+  transform: none;
+}
+
+.score-ring span {
+  position: static;
+
+  display: inline-block;
+
+  margin: 0;
+  padding: 0;
+
+  color: #7f8d84;
+
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+
+  transform: translateY(1px);
+}
+
+/* ============================================================
+   APPA BLOCK 11B — ENTERPRISE MICRO-INTERACTION SYSTEM
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   GLOBAL INTERACTION LANGUAGE
+   ------------------------------------------------------------ */
+
+:root {
+  --appa-hover-lift: translateY(-3px);
+  --appa-hover-lift-soft: translateY(-2px);
+  --appa-press: translateY(0) scale(0.975);
+
+  --appa-border-hover:
+    rgba(39, 105, 65, 0.20);
+
+  --appa-surface-hover:
+    rgba(43, 108, 69, 0.025);
+
+  --appa-focus-ring:
+    0 0 0 4px rgba(42, 119, 73, 0.08);
+
+  --appa-card-shadow-hover:
+    0 2px 4px rgba(16, 42, 27, 0.035),
+    0 15px 38px rgba(16, 42, 27, 0.075);
+
+  --appa-card-shadow-active:
+    0 2px 5px rgba(16, 42, 27, 0.04),
+    0 8px 20px rgba(16, 42, 27, 0.055);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------
+   MAIN CONTENT / MODULE ENTRY
+   ------------------------------------------------------------ */
+
+.main-content,
+.content,
+.page-content,
+.enterprise-module,
+.documents-page,
+.invoice-operations,
+.procurement-operations,
+.supplier-operations,
+.approval-operations,
+.exception-workbench,
+.automation-operations,
+.reporting-operations,
+.settings-operations,
+.audit-logs {
+  animation:
+    appa-module-enter
+    420ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-module-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ------------------------------------------------------------
+   GENERIC INTERACTIVE BUTTON FEEDBACK
+   ------------------------------------------------------------ */
+
+button:not(:disabled) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled):active {
+  transition-duration: 90ms;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.primary-button:not(:disabled),
+.secondary-button:not(:disabled),
+.icon-button:not(:disabled),
+.user-button:not(:disabled) {
+  will-change: transform;
+}
+
+.primary-button:not(:disabled):active,
+.secondary-button:not(:disabled):active,
+.icon-button:not(:disabled):active,
+.user-button:not(:disabled):active {
+  transform: var(--appa-press);
+}
+
+/* ------------------------------------------------------------
+   FORM CONTROLS
+   ------------------------------------------------------------ */
+
+input,
+select,
+textarea {
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    background var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color:
+    rgba(47, 104, 70, 0.22);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color:
+    rgba(43, 112, 70, 0.38);
+
+  box-shadow:
+    var(--appa-focus-ring);
+
+  outline: none;
+}
+
+/* ------------------------------------------------------------
+   UNIVERSAL ENTERPRISE SURFACES
+   ------------------------------------------------------------ */
+
+.enterprise-card,
+.invoice-card,
+.procurement-card,
+.supplier-card,
+.reporting-card,
+.automation-card,
+.audit-card,
+.settings-card,
+.exception-card,
+.approval-card {
+  position: relative;
+
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    background var(--appa-motion-fast) ease;
+}
+
+.enterprise-card:hover,
+.invoice-card:hover,
+.procurement-card:hover,
+.supplier-card:hover,
+.reporting-card:hover,
+.automation-card:hover,
+.audit-card:hover,
+.settings-card:hover,
+.exception-card:hover,
+.approval-card:hover {
+  transform:
+    var(--appa-hover-lift);
+
+  border-color:
+    var(--appa-border-hover);
+
+  box-shadow:
+    var(--appa-card-shadow-hover);
+}
+
+/* ------------------------------------------------------------
+   METRIC / SUMMARY CARDS
+   ------------------------------------------------------------ */
+
+.metric-card {
+  cursor: default;
+}
+
+.metric-card::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  border-radius: inherit;
+
+  background:
+    radial-gradient(
+      circle at 90% 10%,
+      rgba(59, 137, 88, 0.055),
+      transparent 36%
+    );
+
+  opacity: 0;
+
+  pointer-events: none;
+
+  transition:
+    opacity
+    var(--appa-motion-base)
+    ease;
+}
+
+.metric-card:hover::before {
+  opacity: 1;
+}
+
+.metric-label,
+.metric-note {
+  transition:
+    color
+    var(--appa-motion-fast)
+    ease;
+}
+
+.metric-card:hover .metric-label {
+  color: #53655a;
+}
+
+.metric-card:hover .metric-note {
+  color: #748078;
+}
+
+/* ------------------------------------------------------------
+   SIDEBAR — MORE TACTILE NAVIGATION
+   ------------------------------------------------------------ */
+
+.nav-item {
+  isolation: isolate;
+}
+
+.nav-item::after {
+  content: "";
+
+  position: absolute;
+  inset: 4px 6px;
+
+  z-index: -1;
+
+  border-radius: 7px;
+
+  background:
+    rgba(73, 165, 105, 0.055);
+
+  opacity: 0;
+
+  transform:
+    scaleX(0.96);
+
+  transition:
+    opacity var(--appa-motion-fast) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.nav-item:hover::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.nav-item-active::after {
+  opacity: 0;
+}
+
+.nav-item:active {
+  transform:
+    translateX(1px)
+    scale(0.99);
+}
+
+/* ------------------------------------------------------------
+   TOPBAR CONTROLS
+   ------------------------------------------------------------ */
+
+.icon-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.icon-button::after {
+  content: "";
+
+  position: absolute;
+
+  width: 32px;
+  height: 32px;
+
+  left: 50%;
+  top: 50%;
+
+  border-radius: 50%;
+
+  background:
+    rgba(42, 111, 70, 0.07);
+
+  transform:
+    translate(-50%, -50%)
+    scale(0);
+
+  opacity: 0;
+
+  transition:
+    transform
+    320ms
+    var(--appa-ease),
+    opacity
+    var(--appa-motion-fast)
+    ease;
+}
+
+.icon-button:hover::after {
+  transform:
+    translate(-50%, -50%)
+    scale(1);
+
+  opacity: 1;
+}
+
+.icon-button > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------
+   TABLE SYSTEM
+   ------------------------------------------------------------ */
+
+.table-wrap,
+.enterprise-table,
+.invoice-table {
+  isolation: isolate;
+}
+
+.table-wrap tbody tr,
+.enterprise-table tbody tr,
+.invoice-table tbody tr {
+  position: relative;
+
+  transition:
+    background var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.table-wrap tbody tr:hover,
+.enterprise-table tbody tr:hover,
+.invoice-table tbody tr:hover {
+  background:
+    rgba(43, 111, 70, 0.027);
+
+  box-shadow:
+    inset 3px 0 0
+    rgba(48, 126, 79, 0.34);
+}
+
+.table-wrap tbody tr:active,
+.enterprise-table tbody tr:active,
+.invoice-table tbody tr:active {
+  background:
+    rgba(43, 111, 70, 0.045);
+}
+
+.table-wrap thead th,
+.enterprise-table thead th,
+.invoice-table thead th {
+  transition:
+    color
+    var(--appa-motion-fast)
+    ease,
+    background
+    var(--appa-motion-fast)
+    ease;
+}
+
+/* ------------------------------------------------------------
+   STATUS PILLS
+   ------------------------------------------------------------ */
+
+.status,
+[class*="status-pill"],
+[class*="status-badge"],
+[class*="badge"] {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease),
+    box-shadow var(--appa-motion-base) ease,
+    filter var(--appa-motion-fast) ease;
+}
+
+.status:hover,
+[class*="status-pill"]:hover,
+[class*="status-badge"]:hover {
+  transform:
+    translateY(-1px);
+
+  filter:
+    saturate(1.04);
+}
+
+/* ------------------------------------------------------------
+   DOCUMENT UPLOAD EXPERIENCE
+   ------------------------------------------------------------ */
+
+.upload-zone,
+[class*="upload-zone"],
+[class*="drop-zone"],
+[class*="dropzone"] {
+  position: relative;
+  overflow: hidden;
+
+  transition:
+    border-color var(--appa-motion-base) ease,
+    background var(--appa-motion-base) ease,
+    box-shadow var(--appa-motion-base) ease,
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.upload-zone:hover,
+[class*="upload-zone"]:hover,
+[class*="drop-zone"]:hover,
+[class*="dropzone"]:hover {
+  border-color:
+    rgba(46, 119, 75, 0.35);
+
+  background:
+    rgba(47, 121, 77, 0.025);
+
+  box-shadow:
+    0 0 0 4px
+    rgba(47, 121, 77, 0.035);
+
+  transform:
+    translateY(-2px);
+}
+
+.upload-zone svg,
+[class*="upload-zone"] svg,
+[class*="drop-zone"] svg,
+[class*="dropzone"] svg {
+  transition:
+    transform var(--appa-motion-base) var(--appa-ease);
+}
+
+.upload-zone:hover svg,
+[class*="upload-zone"]:hover svg,
+[class*="drop-zone"]:hover svg,
+[class*="dropzone"]:hover svg {
+  transform:
+    translateY(-3px);
+}
+
+/* ------------------------------------------------------------
+   AUTOMATION
+   ------------------------------------------------------------ */
+
+.automation-score {
+  transition:
+    background var(--appa-motion-base) ease;
+}
+
+.automation-score:hover {
+  background:
+    rgba(43, 111, 70, 0.012);
+}
+
+.score-ring::after {
+  content: "";
+
+  position: absolute;
+  inset: -5px;
+
+  border:
+    1px solid
+    rgba(52, 132, 83, 0.08);
+
+  border-radius: 50%;
+
+  opacity: 0;
+
+  transform:
+    scale(0.92);
+
+  transition:
+    opacity
+    var(--appa-motion-base)
+    ease,
+    transform
+    380ms
+    var(--appa-ease);
+
+  pointer-events: none;
+}
+
+.score-ring:hover::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.automation-row {
+  cursor: default;
+}
+
+.automation-row:hover {
+  box-shadow:
+    inset 3px 0 0
+    rgba(48, 126, 79, 0.22);
+}
+
+/* ------------------------------------------------------------
+   ATTENTION / EXCEPTION INTERACTIONS
+   ------------------------------------------------------------ */
+
+.live-attention-button,
+.attention-item {
+  position: relative;
+  overflow: hidden;
+}
+
+.live-attention-button::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(179, 120, 37, 0.035),
+      transparent 65%
+    );
+
+  opacity: 0;
+
+  transition:
+    opacity
+    var(--appa-motion-base)
+    ease;
+}
+
+.live-attention-button:hover::before {
+  opacity: 1;
+}
+
+.live-attention-button > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------
+   DETAIL PANELS / DRAWERS / SELECTIONS
+   ------------------------------------------------------------ */
+
+[class*="detail"],
+[class*="drawer"],
+[class*="workbench"] {
+  transition:
+    border-color var(--appa-motion-fast) ease,
+    box-shadow var(--appa-motion-base) ease,
+    background var(--appa-motion-fast) ease;
+}
+
+/* ------------------------------------------------------------
+   CLICKABLE LINKS / TEXT ACTIONS
+   ------------------------------------------------------------ */
+
+a,
+.text-button {
+  text-underline-offset: 3px;
+}
+
+a:not(.nav-item) {
+  transition:
+    color var(--appa-motion-fast) ease,
+    opacity var(--appa-motion-fast) ease;
+}
+
+/* ------------------------------------------------------------
+   SCROLLBAR — QUIETER ENTERPRISE FINISH
+   ------------------------------------------------------------ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(74, 99, 83, 0.22)
+    transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border:
+    2px solid transparent;
+
+  border-radius: 999px;
+
+  background:
+    rgba(74, 99, 83, 0.20);
+
+  background-clip:
+    padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    rgba(55, 85, 65, 0.32);
+
+  background-clip:
+    padding-box;
+}
+
+/* ------------------------------------------------------------
+   SKELETON-READY SHIMMER
+   Only affects elements explicitly using .skeleton.
+   ------------------------------------------------------------ */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+
+  background:
+    #eef2ef;
+}
+
+.skeleton::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.68),
+      transparent
+    );
+
+  transform:
+    translateX(-100%);
+
+  animation:
+    appa-shimmer
+    1.5s
+    ease-in-out
+    infinite;
+}
+
+@keyframes appa-shimmer {
+  100% {
+    transform:
+      translateX(100%);
+  }
+}
+
+/* ------------------------------------------------------------
+   MODAL / DIALOG MOTION
+   ------------------------------------------------------------ */
+
+[role="dialog"],
+.modal,
+.dialog {
+  animation:
+    appa-dialog-enter
+    280ms
+    var(--appa-ease)
+    both;
+}
+
+@keyframes appa-dialog-enter {
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(8px)
+      scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+/* ------------------------------------------------------------
+   SELECTION FEEDBACK
+   ------------------------------------------------------------ */
+
+::selection {
+  background:
+    rgba(54, 139, 87, 0.18);
+
+  color:
+    #173a26;
+}
+
+/* ------------------------------------------------------------
+   SMALL SCREEN BEHAVIOUR
+   ------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+  .nav-item:hover,
+  .table-wrap tbody tr:hover,
+  .enterprise-table tbody tr:hover,
+  .invoice-table tbody tr:hover,
+  .upload-zone:hover,
+  [class*="upload-zone"]:hover,
+  [class*="drop-zone"]:hover,
+  [class*="dropzone"]:hover {
+    transform: none;
+  }
+
+  .metric-card:hover {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------
+   REDUCED MOTION — BLOCK 11B
+   ------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .main-content,
+  .content,
+  .page-content,
+  .enterprise-module,
+  .documents-page,
+  .invoice-operations,
+  .procurement-operations,
+  .supplier-operations,
+  .approval-operations,
+  .exception-workbench,
+  .automation-operations,
+  .reporting-operations,
+  .settings-operations,
+  .audit-logs,
+  [role="dialog"],
+  .modal,
+  .dialog,
+  .skeleton::after {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
