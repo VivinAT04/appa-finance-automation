@@ -31,9 +31,11 @@ import {
   getDashboardData,
   getOperationsSummary,
   getStoredAuthToken,
+  getStoredOrganisationId,
   loginUser,
   logoutUser,
   setStoredAuthToken,
+  setStoredOrganisationId,
 } from "./api";
 import Documents from "./components/Documents";
 import EnterpriseModule from "./components/EnterpriseModule";
@@ -83,6 +85,68 @@ function App() {
   const [authError, setAuthError] =
     useState("");
 
+  const [
+    selectedOrganisationId,
+    setSelectedOrganisationId,
+  ] = useState(() =>
+    getStoredOrganisationId()
+  );
+
+  const [
+    workspaceOpen,
+    setWorkspaceOpen,
+  ] = useState(false);
+
+  const organisations =
+    authUser?.organisations || [];
+
+  const selectedOrganisation =
+    useMemo(() => {
+      if (!organisations.length) {
+        return null;
+      }
+
+      return (
+        organisations.find(
+          (organisation) =>
+            organisation.id ===
+            selectedOrganisationId
+        ) ||
+        organisations[0]
+      );
+    }, [
+      organisations,
+      selectedOrganisationId,
+    ]);
+
+  const workspaceInitials =
+    useMemo(() => {
+      const source = String(
+        selectedOrganisation?.code ||
+          selectedOrganisation?.name ||
+          "APPA"
+      )
+        .trim()
+        .replace(/[^A-Za-z0-9 ]/g, "");
+
+      if (!source) return "AP";
+
+      const words = source
+        .split(/\s+/)
+        .filter(Boolean);
+
+      if (words.length > 1) {
+        return (
+          words[0][0] +
+          words[1][0]
+        ).toUpperCase();
+      }
+
+      return source
+        .slice(0, 2)
+        .toUpperCase();
+    }, [selectedOrganisation]);
+
   const userInitials = useMemo(() => {
     const name = String(
       authUser?.fullName || ""
@@ -124,6 +188,10 @@ function App() {
 
         if (!cancelled) {
           setAuthUser(user);
+
+          setSelectedOrganisationId(
+            getStoredOrganisationId()
+          );
         }
       } catch {
         setStoredAuthToken(null);
@@ -142,6 +210,9 @@ function App() {
 
     function sessionExpired() {
       setStoredAuthToken(null);
+      setStoredOrganisationId(null);
+      setSelectedOrganisationId(null);
+      setWorkspaceOpen(false);
       setAuthUser(null);
       setAuthError(
         "Your session expired. Please sign in again."
@@ -177,6 +248,34 @@ function App() {
       );
 
       setStoredAuthToken(result.token);
+
+      const loginOrganisations =
+        result.user?.organisations || [];
+
+      const storedOrganisationId =
+        getStoredOrganisationId();
+
+      const storedOrganisationValid =
+        loginOrganisations.some(
+          (organisation) =>
+            organisation.id ===
+            storedOrganisationId
+        );
+
+      const nextOrganisationId =
+        storedOrganisationValid
+          ? storedOrganisationId
+          : loginOrganisations[0]?.id ||
+            null;
+
+      setStoredOrganisationId(
+        nextOrganisationId
+      );
+
+      setSelectedOrganisationId(
+        nextOrganisationId
+      );
+
       setAuthUser(result.user);
     } catch (error) {
       setStoredAuthToken(null);
@@ -198,9 +297,55 @@ function App() {
       // the local authenticated session.
     } finally {
       setStoredAuthToken(null);
+      setStoredOrganisationId(null);
+      setSelectedOrganisationId(null);
+      setWorkspaceOpen(false);
       setAuthUser(null);
       setAuthError("");
     }
+  }
+
+  function handleWorkspaceChange(
+    organisationId
+  ) {
+    const allowed =
+      organisations.some(
+        (organisation) =>
+          organisation.id ===
+          organisationId
+      );
+
+    if (
+      !allowed ||
+      organisationId ===
+        selectedOrganisationId
+    ) {
+      setWorkspaceOpen(false);
+      return;
+    }
+
+    setStoredOrganisationId(
+      organisationId
+    );
+
+    setSelectedOrganisationId(
+      organisationId
+    );
+
+    setWorkspaceOpen(false);
+
+    setActive("Dashboard");
+
+    setDashboard(null);
+    setDashboardError("");
+    setDashboardLoading(true);
+
+    setOperationsSummary({
+      pendingApprovals: 0,
+      openExceptions: 0,
+      exceptionInvoices: 0,
+      automationStatus: "Idle",
+    });
   }
 
   const [operationsSummary, setOperationsSummary] =
@@ -266,7 +411,10 @@ function App() {
 
     return () =>
       window.clearInterval(timer);
-  }, [authUser]);
+  }, [
+    authUser,
+    selectedOrganisationId,
+  ]);
 
 
   const [active, setActive] = useState("Dashboard");
@@ -310,7 +458,11 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [active, authUser]);
+  }, [
+    active,
+    authUser,
+    selectedOrganisationId,
+  ]);
 
   if (authLoading) {
     return (
@@ -358,18 +510,153 @@ function App() {
         </div>
 
         <div className="workspace">
-          <span className="workspace-label">WORKSPACE</span>
+          <span className="workspace-label">
+            WORKSPACE
+          </span>
 
-          <button className="workspace-select">
-            <span className="workspace-avatar">AF</span>
+          <div className="workspace-switcher">
+            <button
+              type="button"
+              className={`workspace-select ${
+                workspaceOpen
+                  ? "workspace-select-open"
+                  : ""
+              }`}
+              onClick={() =>
+                setWorkspaceOpen(
+                  (open) => !open
+                )
+              }
+              aria-haspopup="listbox"
+              aria-expanded={workspaceOpen}
+              aria-label="Select organisation workspace"
+            >
+              <span className="workspace-avatar">
+                {workspaceInitials}
+              </span>
 
-            <span className="workspace-copy">
-              <strong>APPA Finance</strong>
-              <small>Production workspace</small>
-            </span>
+              <span className="workspace-copy">
+                <strong>
+                  {selectedOrganisation?.name ||
+                    "Select workspace"}
+                </strong>
 
-            <ChevronDown size={15} />
-          </button>
+                <small>
+                  {selectedOrganisation?.code
+                    ? `${selectedOrganisation.code} · Production`
+                    : "Production workspace"}
+                </small>
+              </span>
+
+              <ChevronDown
+                size={15}
+                className="workspace-chevron"
+              />
+            </button>
+
+            {workspaceOpen && (
+              <div
+                className="workspace-menu"
+                role="listbox"
+                aria-label="Available organisation workspaces"
+              >
+                <div className="workspace-menu-heading">
+                  <span>
+                    SWITCH WORKSPACE
+                  </span>
+
+                  <small>
+                    {organisations.length}{" "}
+                    {organisations.length === 1
+                      ? "organisation"
+                      : "organisations"}
+                  </small>
+                </div>
+
+                <div className="workspace-options">
+                  {organisations.map(
+                    (organisation) => {
+                      const selected =
+                        organisation.id ===
+                        selectedOrganisation?.id;
+
+                      const initials =
+                        String(
+                          organisation.code ||
+                            organisation.name ||
+                            "AP"
+                        )
+                          .replace(
+                            /[^A-Za-z0-9]/g,
+                            ""
+                          )
+                          .slice(0, 2)
+                          .toUpperCase();
+
+                      return (
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={
+                            selected
+                          }
+                          key={
+                            organisation.id
+                          }
+                          className={`workspace-option ${
+                            selected
+                              ? "workspace-option-active"
+                              : ""
+                          }`}
+                          onClick={() =>
+                            handleWorkspaceChange(
+                              organisation.id
+                            )
+                          }
+                        >
+                          <span className="workspace-option-avatar">
+                            {initials ||
+                              "AP"}
+                          </span>
+
+                          <span className="workspace-option-copy">
+                            <strong>
+                              {
+                                organisation.name
+                              }
+                            </strong>
+
+                            <small>
+                              {organisation.code ||
+                                "Organisation"}
+                            </small>
+                          </span>
+
+                          {selected && (
+                            <CircleCheck
+                              size={16}
+                              strokeWidth={
+                                1.9
+                              }
+                            />
+                          )}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+
+                <div className="workspace-menu-footer">
+                  <Building2 size={13} />
+
+                  <span>
+                    Finance data is isolated
+                    by organisation
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <nav className="navigation">
@@ -484,10 +771,20 @@ function App() {
           </div>
         </header>
 
-        <section className="content">
+        <section
+          className="content"
+          key={
+            selectedOrganisationId ||
+            "no-organisation"
+          }
+        >
           <div className="page-heading">
             <div>
-              <p className="eyebrow">FINANCE OPERATIONS</p>
+              <p className="eyebrow">
+                {selectedOrganisation?.name
+                  ? `${selectedOrganisation.name.toUpperCase()} · FINANCE OPERATIONS`
+                  : "FINANCE OPERATIONS"}
+              </p>
               <h1>{active}</h1>
 
               <p className="page-description">
