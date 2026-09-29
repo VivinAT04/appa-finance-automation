@@ -710,11 +710,19 @@ router.post(
         of invoices
       ) {
         try {
-          matchInvoice(
-            invoice.id
-          );
+          const matchResult =
+            matchInvoice(
+              invoice.id
+            );
 
-          succeeded += 1;
+          if (
+            matchResult?.matchStatus ===
+            "Matched"
+          ) {
+            succeeded += 1;
+          } else {
+            failed += 1;
+          }
         } catch (error) {
           console.error(
             "Invoice automation failure:",

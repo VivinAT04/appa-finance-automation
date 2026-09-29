@@ -35,6 +35,7 @@ import PurchaseOrderOperations from "./PurchaseOrderOperations";
 import SupplierOperations from "./SupplierOperations";
 import ApprovalOperations from "./ApprovalOperations";
 import ExceptionWorkbench from "./ExceptionWorkbench";
+import AutomationOperations from "./AutomationOperations";
 
 import "./EnterpriseModule.css";
 
@@ -423,12 +424,7 @@ export default function EnterpriseModule({ module }) {
       )}
 
       {module === "Automation" && (
-        <AutomationView
-          rows={rows}
-          working={working}
-          onRefresh={load}
-          onRun={runAutomation}
-        />
+        <AutomationOperations />
       )}
 
       {module === "Reports" && (
