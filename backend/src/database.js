@@ -248,3 +248,24 @@ db.exec(`
 `);
 
 module.exports = db;
+
+/* =========================================================
+   APPA AUTHENTICATION
+   ========================================================= */
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'Finance Analyst',
+    status TEXT NOT NULL DEFAULT 'Active',
+    last_login_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+    ON users(email);
+`);
