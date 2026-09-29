@@ -4852,3 +4852,64 @@ input:-webkit-autofill {
     transition: none !important;
   }
 }
+
+/* APPA LOGIN LOGO POLISH — BLOCK 13B */
+
+.auth-brand-logo {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  padding: 4px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.auth-brand-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.auth-brand {
+  gap: 15px;
+}
+
+.auth-brand:hover .auth-brand-logo {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+}
+
+.auth-brand strong {
+  font-size: 19px;
+}
+
+@media (max-width: 700px) {
+  .auth-brand-logo {
+    width: 50px;
+    height: 50px;
+    flex-basis: 50px;
+    padding: 3px;
+    border-radius: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand-logo {
+    transition: none;
+  }
+
+  .auth-brand:hover .auth-brand-logo {
+    transform: none;
+  }
+}
