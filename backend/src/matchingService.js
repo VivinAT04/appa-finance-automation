@@ -165,7 +165,8 @@ function createException(
   invoiceId,
   exceptionType,
   severity,
-  description
+  description,
+  organisationId
 ) {
   const existing = db.prepare(`
     SELECT id
@@ -216,7 +217,10 @@ function createException(
   return id;
 }
 
-function resolveSystemExceptions(invoiceId) {
+function resolveSystemExceptions(
+  invoiceId,
+  organisationId
+) {
   const now = new Date().toISOString();
 
   const open = db.prepare(`
@@ -443,7 +447,8 @@ function getMatch(
 function saveExceptionMatch(
   invoice,
   po,
-  details
+  details,
+  organisationId
 ) {
   const checks = {
     supplierMatch: false,
@@ -514,7 +519,8 @@ function matchInvoice(
       invoice.id,
       "DUPLICATE_INVOICE",
       "High",
-      `Potential duplicate invoice ${invoice.invoice_number} detected.`
+      `Potential duplicate invoice ${invoice.invoice_number} detected.`,
+      organisationId
     );
   }
 
@@ -523,18 +529,21 @@ function matchInvoice(
       invoice.id,
       "MISSING_PO_REFERENCE",
       "High",
-      "Invoice does not contain a purchase order reference."
+      "Invoice does not contain a purchase order reference.",
+      organisationId
     );
 
     return saveExceptionMatch(
       invoice,
       null,
-      "Purchase order reference missing."
+      "Purchase order reference missing.",
+      organisationId
     );
   }
 
   const po = getPurchaseOrder(
-    invoice.purchase_order_number
+    invoice.purchase_order_number,
+    organisationId
   );
 
   if (!po) {
@@ -542,13 +551,15 @@ function matchInvoice(
       invoice.id,
       "PURCHASE_ORDER_NOT_FOUND",
       "High",
-      `Purchase order ${invoice.purchase_order_number} was not found.`
+      `Purchase order ${invoice.purchase_order_number} was not found.`,
+      organisationId
     );
 
     return saveExceptionMatch(
       invoice,
       null,
-      "Referenced purchase order was not found."
+      "Referenced purchase order was not found.",
+      organisationId
     );
   }
 
@@ -644,7 +655,8 @@ function matchInvoice(
       invoice.id,
       "SUPPLIER_MISMATCH",
       "High",
-      `Invoice supplier "${invoice.supplier_name}" does not match PO supplier "${po.supplier_name}".`
+      `Invoice supplier "${invoice.supplier_name}" does not match PO supplier "${po.supplier_name}".`,
+      organisationId
     );
   }
 
@@ -663,7 +675,8 @@ function matchInvoice(
       invoice.id,
       "CURRENCY_MISMATCH",
       "High",
-      `Invoice currency ${invoice.currency} does not match PO currency ${po.currency}.`
+      `Invoice currency ${invoice.currency} does not match PO currency ${po.currency}.`,
+      organisationId
     );
   }
 
@@ -688,7 +701,8 @@ function matchInvoice(
       invoice.id,
       "AMOUNT_MISMATCH",
       "High",
-      `Invoice total ${invoice.total_amount} differs from PO total ${po.total_amount}.`
+      `Invoice total ${invoice.total_amount} differs from PO total ${po.total_amount}.`,
+      organisationId
     );
   }
 
@@ -701,7 +715,8 @@ function matchInvoice(
       invoice.id,
       "LINE_ITEM_MISMATCH",
       "Medium",
-      "Invoice quantities, unit prices or line totals do not fully match the purchase order."
+      "Invoice quantities, unit prices or line totals do not fully match the purchase order.",
+      organisationId
     );
   }
 
@@ -744,7 +759,8 @@ function matchInvoice(
 
   if (matched) {
     resolveSystemExceptions(
-      invoice.id
+      invoice.id,
+      organisationId
     );
 
     const approvalId =
