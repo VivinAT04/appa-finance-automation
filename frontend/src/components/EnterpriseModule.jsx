@@ -36,6 +36,8 @@ import SupplierOperations from "./SupplierOperations";
 import ApprovalOperations from "./ApprovalOperations";
 import ExceptionWorkbench from "./ExceptionWorkbench";
 import AutomationOperations from "./AutomationOperations";
+import ReportingOperations from "./ReportingOperations";
+import SettingsOperations from "./SettingsOperations";
 
 import "./EnterpriseModule.css";
 
@@ -321,32 +323,29 @@ export default function EnterpriseModule({ module }) {
   }
 
   async function editSetting(setting) {
-    const value = window.prompt(
-      `Enter a new value for ${setting.key}:`,
-      setting.value
-    );
+    const value =
+      setting?.directValue ??
+      setting?.value;
 
-    if (value === null || !String(value).trim()) {
-      return;
+    if (
+      value === undefined ||
+      value === null ||
+      String(value).trim() === ""
+    ) {
+      throw new Error(
+        "Setting value is required."
+      );
     }
 
-    try {
-      setWorking(setting.key);
-      setMessage("");
-      setError("");
+    setWorking(setting.key);
 
+    try {
       await updateSetting(
         setting.key,
-        String(value).trim()
+        String(value)
       );
 
-      setMessage(`${setting.key} updated.`);
-      await load();
-    } catch (requestError) {
-      setError(
-        requestError?.response?.data?.message ||
-          "Could not update setting."
-      );
+      await loadSettings();
     } finally {
       setWorking("");
     }
@@ -911,150 +910,11 @@ function ReportsView({
   report,
   onRefresh,
 }) {
-  const invoices =
-    report?.invoiceSummary || [];
-
-  const matches =
-    report?.matchSummary || [];
-
-  const exceptions =
-    report?.exceptionSummary || [];
-
-  const automation =
-    report?.automationSummary || [];
-
   return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Reports"
-        description="Operational accounts-payable metrics generated directly from the workflow database."
-        onRefresh={onRefresh}
-      />
-
-      <div className="enterprise-report-grid">
-        <article className="enterprise-report-card">
-          <div className="enterprise-report-icon">
-            <BarChart3 size={19} />
-          </div>
-
-          <h3>Invoice Value</h3>
-
-          {!invoices.length ? (
-            <p>No invoice data.</p>
-          ) : (
-            invoices.map((item) => (
-              <div
-                className="enterprise-report-row"
-                key={item.currency}
-              >
-                <div>
-                  <strong>
-                    {item.invoiceCount}
-                  </strong>
-                  <small>Invoices</small>
-                </div>
-
-                <strong>
-                  {money(
-                    item.totalValue,
-                    item.currency
-                  )}
-                </strong>
-              </div>
-            ))
-          )}
-        </article>
-
-        <article className="enterprise-report-card">
-          <div className="enterprise-report-icon">
-            <ShieldCheck size={19} />
-          </div>
-
-          <h3>PO Matching</h3>
-
-          {!matches.length ? (
-            <p>No matching data yet.</p>
-          ) : (
-            matches.map((item) => (
-              <div
-                className="enterprise-report-row"
-                key={item.matchStatus}
-              >
-                <div>
-                  <strong>{item.count}</strong>
-                  <small>{item.matchStatus}</small>
-                </div>
-
-                <strong>
-                  {Number(
-                    item.averageScore || 0
-                  ).toFixed(1)}
-                  %
-                </strong>
-              </div>
-            ))
-          )}
-        </article>
-
-        <article className="enterprise-report-card">
-          <div className="enterprise-report-icon">
-            <AlertTriangle size={19} />
-          </div>
-
-          <h3>Exceptions</h3>
-
-          {!exceptions.length ? (
-            <p>No exceptions recorded.</p>
-          ) : (
-            exceptions.map((item, index) => (
-              <div
-                className="enterprise-report-row"
-                key={`${item.exceptionType}-${item.status}-${index}`}
-              >
-                <div>
-                  <strong>{item.count}</strong>
-                  <small>
-                    {String(item.exceptionType)
-                      .replaceAll("_", " ")}
-                  </small>
-                </div>
-
-                <StatusBadge value={item.status} />
-              </div>
-            ))
-          )}
-        </article>
-
-        <article className="enterprise-report-card">
-          <div className="enterprise-report-icon">
-            <Bot size={19} />
-          </div>
-
-          <h3>Automation</h3>
-
-          {!automation.length ? (
-            <p>No automation data yet.</p>
-          ) : (
-            automation.map((item) => (
-              <div
-                className="enterprise-report-row"
-                key={item.status}
-              >
-                <div>
-                  <strong>{item.runCount}</strong>
-                  <small>{item.status}</small>
-                </div>
-
-                <strong>
-                  {item.itemsSucceeded}/
-                  {item.itemsProcessed}
-                </strong>
-              </div>
-            ))
-          )}
-        </article>
-      </div>
-    </section>
+    <ReportingOperations
+      report={report}
+      onRefresh={onRefresh}
+    />
   );
 }
 
@@ -1064,60 +924,33 @@ function SettingsView({
   onRefresh,
   onEdit,
 }) {
+  async function saveSetting(
+    key,
+    value
+  ) {
+    const row = rows.find(
+      (item) => item.key === key
+    );
+
+    if (!row) {
+      throw new Error(
+        "Setting not found."
+      );
+    }
+
+    await onEdit({
+      ...row,
+      value,
+      directValue: value,
+    });
+  }
+
   return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Settings"
-        description="Operational controls used by matching, duplicate detection and automatic approval."
-        onRefresh={onRefresh}
-      />
-
-      {!rows.length ? (
-        <EmptyState>
-          No workflow settings available.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-grid">
-          {rows.map((setting) => (
-            <article
-              className="enterprise-card"
-              key={setting.key}
-            >
-              <div className="enterprise-card-top">
-                <div className="enterprise-icon-box">
-                  <Settings2 size={19} />
-                </div>
-              </div>
-
-              <div className="enterprise-card-title">
-                <h3>
-                  {setting.key
-                    .replaceAll("_", " ")
-                    .toUpperCase()}
-                </h3>
-              </div>
-
-              <div className="enterprise-setting-value">
-                {setting.value}
-              </div>
-
-              <p className="enterprise-description">
-                {setting.description}
-              </p>
-
-              <button
-                type="button"
-                className="enterprise-secondary-button enterprise-full-button"
-                disabled={working === setting.key}
-                onClick={() => onEdit(setting)}
-              >
-                <Settings2 size={15} />
-                Change Setting
-              </button>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
+    <SettingsOperations
+      rows={rows}
+      working={working}
+      onRefresh={onRefresh}
+      onSave={saveSetting}
+    />
   );
 }

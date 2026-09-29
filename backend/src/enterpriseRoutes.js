@@ -1218,6 +1218,56 @@ router.get(
    SETTINGS
    ========================================================= */
 
+const DEFAULT_WORKFLOW_SETTINGS = [
+  {
+    key: "amount_tolerance",
+    value: "1.00",
+    description:
+      "Maximum monetary variance permitted during invoice-to-PO matching.",
+  },
+  {
+    key: "auto_approval_match_score",
+    value: "100",
+    description:
+      "Minimum successful match score required for automatic approval.",
+  },
+  {
+    key: "duplicate_detection",
+    value: "true",
+    description:
+      "Enable duplicate invoice detection using invoice number, supplier and total amount.",
+  },
+];
+
+function ensureWorkflowSettings() {
+  const insertSetting = db.prepare(`
+    INSERT OR IGNORE INTO app_settings (
+      setting_key,
+      setting_value,
+      description,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?)
+  `);
+
+  const now = new Date().toISOString();
+
+  const transaction = db.transaction(() => {
+    for (const setting of DEFAULT_WORKFLOW_SETTINGS) {
+      insertSetting.run(
+        setting.key,
+        setting.value,
+        setting.description,
+        now
+      );
+    }
+  });
+
+  transaction();
+}
+
+ensureWorkflowSettings();
+
 router.get(
   "/settings",
   (_req, res) => {
