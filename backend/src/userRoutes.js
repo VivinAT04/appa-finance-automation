@@ -35,53 +35,137 @@ function validPassword(value) {
   );
 }
 
+function requireOrganisationId(req) {
+  const organisationId = String(
+    req.organisation?.id ||
+      req.organisationId ||
+      ""
+  ).trim();
+
+  if (!organisationId) {
+    const error = new Error(
+      "Organisation context is required."
+    );
+
+    error.code = "ORGANISATION_REQUIRED";
+
+    throw error;
+  }
+
+  return organisationId;
+}
+
 function publicUser(row) {
   return {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
     role: row.role,
-    status: row.status,
+    status: row.membership_status || row.status,
+    accountStatus: row.status,
+    membershipStatus:
+      row.membership_status || null,
     lastLoginAt: row.last_login_at,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    updatedAt:
+      row.membership_updated_at ||
+      row.updated_at,
   };
 }
 
-function listUsers() {
+function getOrganisationUser(
+  organisationId,
+  userId
+) {
   return db.prepare(`
     SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
+      u.id,
+      u.email,
+      u.password_hash,
+      u.full_name,
+      u.role,
+      u.status,
+      u.last_login_at,
+      u.created_at,
+      u.updated_at,
+      om.id AS membership_id,
+      om.status AS membership_status,
+      om.created_at AS membership_created_at,
+      om.updated_at AS membership_updated_at
+    FROM organisation_memberships om
+    INNER JOIN users u
+      ON u.id = om.user_id
+    WHERE om.organisation_id = ?
+      AND om.user_id = ?
+    LIMIT 1
+  `).get(
+    organisationId,
+    userId
+  );
+}
+
+function listUsers(organisationId) {
+  return db.prepare(`
+    SELECT
+      u.id,
+      u.email,
+      u.full_name,
+      u.role,
+      u.status,
+      u.last_login_at,
+      u.created_at,
+      u.updated_at,
+      om.status AS membership_status,
+      om.updated_at AS membership_updated_at
+    FROM organisation_memberships om
+    INNER JOIN users u
+      ON u.id = om.user_id
+    WHERE om.organisation_id = ?
     ORDER BY
-      CASE status
+      CASE om.status
         WHEN 'Active' THEN 0
         ELSE 1
       END,
-      full_name COLLATE NOCASE,
-      email COLLATE NOCASE
-  `).all();
+      u.full_name COLLATE NOCASE,
+      u.email COLLATE NOCASE
+  `).all(organisationId);
 }
 
-function activeAdministratorCount() {
+function activeAdministratorCount(
+  organisationId
+) {
   const row = db.prepare(`
     SELECT COUNT(*) AS total
-    FROM users
-    WHERE role = 'Administrator'
-      AND status = 'Active'
-  `).get();
+    FROM organisation_memberships om
+    INNER JOIN users u
+      ON u.id = om.user_id
+    WHERE om.organisation_id = ?
+      AND om.status = 'Active'
+      AND u.status = 'Active'
+      AND u.role = 'Administrator'
+  `).get(organisationId);
 
   return Number(row?.total || 0);
 }
 
-function writeAudit(action, entityId, description) {
+function activeMembershipCount(userId) {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM organisation_memberships
+    WHERE user_id = ?
+      AND status = 'Active'
+  `).get(userId);
+
+  return Number(row?.total || 0);
+}
+
+function writeAudit(
+  organisationId,
+  actorUserId,
+  action,
+  entityId,
+  description
+) {
   const columns = db
     .prepare("PRAGMA table_info(audit_logs)")
     .all()
@@ -92,16 +176,18 @@ function writeAudit(action, entityId, description) {
 
   const values = {
     id,
+    organisation_id: organisationId,
     action,
     entity_type: "User",
     entity_id: entityId,
     description,
-    performed_by: "APPA Administrator",
+    performed_by:
+      actorUserId || "APPA Administrator",
     created_at: now,
     timestamp: now,
     event_type: action,
     details: description,
-    user_id: entityId,
+    user_id: actorUserId || null,
   };
 
   const supported = Object.keys(values).filter(
@@ -127,7 +213,9 @@ function writeAudit(action, entityId, description) {
 
   try {
     db.prepare(sql).run(
-      ...supported.map((key) => values[key])
+      ...supported.map(
+        (key) => values[key]
+      )
     );
   } catch (error) {
     console.warn(
@@ -152,9 +240,14 @@ router.get("/roles", (_req, res) => {
   });
 });
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const organisationId =
+    requireOrganisationId(req);
+
   const users =
-    listUsers().map(publicUser);
+    listUsers(organisationId).map(
+      publicUser
+    );
 
   return res.json({
     success: true,
@@ -164,17 +257,26 @@ router.get("/", (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  const organisationId =
+    requireOrganisationId(req);
+
   const fullName =
-    String(req.body?.fullName || "").trim();
+    String(
+      req.body?.fullName || ""
+    ).trim();
 
   const email =
     normalizeEmail(req.body?.email);
 
   const role =
-    String(req.body?.role || "").trim();
+    String(
+      req.body?.role || ""
+    ).trim();
 
   const password =
-    String(req.body?.password || "");
+    String(
+      req.body?.password || ""
+    );
 
   if (!fullName) {
     return res.status(400).json({
@@ -186,14 +288,16 @@ router.post("/", async (req, res) => {
   if (!validEmail(email)) {
     return res.status(400).json({
       success: false,
-      message: "A valid email address is required.",
+      message:
+        "A valid email address is required.",
     });
   }
 
   if (!ROLES.includes(role)) {
     return res.status(400).json({
       success: false,
-      message: "A valid APPA role is required.",
+      message:
+        "A valid APPA role is required.",
     });
   }
 
@@ -206,68 +310,175 @@ router.post("/", async (req, res) => {
   }
 
   const existing = db.prepare(`
-    SELECT id
+    SELECT *
     FROM users
     WHERE email = ?
     LIMIT 1
   `).get(email);
 
+  const now = new Date().toISOString();
+
   if (existing) {
-    return res.status(409).json({
-      success: false,
-      message:
-        "An APPA user with this email already exists.",
+    const membership = db.prepare(`
+      SELECT *
+      FROM organisation_memberships
+      WHERE organisation_id = ?
+        AND user_id = ?
+      LIMIT 1
+    `).get(
+      organisationId,
+      existing.id
+    );
+
+    if (membership) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This user already belongs to the selected organisation.",
+      });
+    }
+
+    if (existing.role !== role) {
+      return res.status(409).json({
+        success: false,
+        code:
+          "GLOBAL_ROLE_CONFLICT",
+        message:
+          `This account already exists with the global role ${existing.role}. Select that role when adding the account to another organisation.`,
+      });
+    }
+
+    const addMembership =
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO organisation_memberships (
+            id,
+            organisation_id,
+            user_id,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, 'Active', ?, ?)
+        `).run(
+          crypto.randomUUID(),
+          organisationId,
+          existing.id,
+          now,
+          now
+        );
+
+        if (
+          existing.status !== ACTIVE
+        ) {
+          db.prepare(`
+            UPDATE users
+            SET status = 'Active',
+                updated_at = ?
+            WHERE id = ?
+          `).run(
+            now,
+            existing.id
+          );
+        }
+      });
+
+    addMembership();
+
+    writeAudit(
+      organisationId,
+      req.accessUser?.id,
+      "USER_MEMBERSHIP_CREATED",
+      existing.id,
+      `${existing.full_name} was added to ${req.organisation.name}.`
+    );
+
+    const joined =
+      getOrganisationUser(
+        organisationId,
+        existing.id
+      );
+
+    return res.status(201).json({
+      success: true,
+      user: publicUser(joined),
     });
   }
 
   const id = crypto.randomUUID();
-  const now = new Date().toISOString();
 
   const passwordHash =
-    await bcrypt.hash(password, 12);
+    await bcrypt.hash(
+      password,
+      12
+    );
 
-  db.prepare(`
-    INSERT INTO users (
-      id,
-      email,
-      password_hash,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, 'Active', NULL, ?, ?)
-  `).run(
-    id,
-    email,
-    passwordHash,
-    fullName,
-    role,
-    now,
-    now
-  );
+  const createUser =
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO users (
+          id,
+          email,
+          password_hash,
+          full_name,
+          role,
+          status,
+          last_login_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ?, ?, ?, ?, ?,
+          'Active',
+          NULL,
+          ?, ?
+        )
+      `).run(
+        id,
+        email,
+        passwordHash,
+        fullName,
+        role,
+        now,
+        now
+      );
+
+      db.prepare(`
+        INSERT INTO organisation_memberships (
+          id,
+          organisation_id,
+          user_id,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ?, ?, ?, 'Active', ?, ?
+        )
+      `).run(
+        crypto.randomUUID(),
+        organisationId,
+        id,
+        now,
+        now
+      );
+    });
+
+  createUser();
 
   writeAudit(
+    organisationId,
+    req.accessUser?.id,
     "USER_CREATED",
     id,
-    `${fullName} was created with role ${role}.`
+    `${fullName} was created in ${req.organisation.name} with role ${role}.`
   );
 
-  const created = db.prepare(`
-    SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
-    WHERE id = ?
-  `).get(id);
+  const created =
+    getOrganisationUser(
+      organisationId,
+      id
+    );
 
   return res.status(201).json({
     success: true,
@@ -276,15 +487,19 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", (req, res) => {
-  const id =
-    String(req.params.id || "").trim();
+  const organisationId =
+    requireOrganisationId(req);
 
-  const existing = db.prepare(`
-    SELECT *
-    FROM users
-    WHERE id = ?
-    LIMIT 1
-  `).get(id);
+  const id =
+    String(
+      req.params.id || ""
+    ).trim();
+
+  const existing =
+    getOrganisationUser(
+      organisationId,
+      id
+    );
 
   if (!existing) {
     return res.status(404).json({
@@ -296,17 +511,23 @@ router.patch("/:id", (req, res) => {
   const nextName =
     req.body?.fullName === undefined
       ? existing.full_name
-      : String(req.body.fullName || "").trim();
+      : String(
+          req.body.fullName || ""
+        ).trim();
 
   const nextRole =
     req.body?.role === undefined
       ? existing.role
-      : String(req.body.role || "").trim();
+      : String(
+          req.body.role || ""
+        ).trim();
 
   const nextStatus =
     req.body?.status === undefined
-      ? existing.status
-      : String(req.body.status || "").trim();
+      ? existing.membership_status
+      : String(
+          req.body.status || ""
+        ).trim();
 
   if (!nextName) {
     return res.status(400).json({
@@ -318,93 +539,168 @@ router.patch("/:id", (req, res) => {
   if (!ROLES.includes(nextRole)) {
     return res.status(400).json({
       success: false,
-      message: "A valid APPA role is required.",
+      message:
+        "A valid APPA role is required.",
     });
   }
 
   if (!STATUSES.includes(nextStatus)) {
     return res.status(400).json({
       success: false,
-      message: "A valid account status is required.",
+      message:
+        "A valid membership status is required.",
     });
   }
 
   const removingActiveAdministrator =
-    existing.role === "Administrator" &&
+    existing.role ===
+      "Administrator" &&
     existing.status === ACTIVE &&
+    existing.membership_status ===
+      ACTIVE &&
     (
-      nextRole !== "Administrator" ||
+      nextRole !==
+        "Administrator" ||
       nextStatus !== ACTIVE
     );
 
   if (
     removingActiveAdministrator &&
-    activeAdministratorCount() <= 1
+    activeAdministratorCount(
+      organisationId
+    ) <= 1
   ) {
     return res.status(409).json({
       success: false,
       message:
-        "APPA must retain at least one active Administrator.",
+        `${req.organisation.name} must retain at least one active Administrator.`,
     });
   }
 
   if (
-    req.accessUser?.id === existing.id &&
+    req.accessUser?.id ===
+      existing.id &&
     nextStatus !== ACTIVE
   ) {
     return res.status(409).json({
       success: false,
       message:
-        "You cannot deactivate your own signed-in account.",
+        "You cannot deactivate your own membership in the selected organisation.",
     });
   }
 
-  const now = new Date().toISOString();
+  /*
+   * Roles currently live on users rather than memberships.
+   * Therefore a role change affects the same identity in every
+   * organisation. Block 14C.1 keeps this existing model explicit
+   * rather than silently pretending roles are tenant-specific.
+   */
+  if (
+    nextRole !== existing.role
+  ) {
+    const membershipCount =
+      db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM organisation_memberships
+        WHERE user_id = ?
+      `).get(existing.id);
 
-  db.prepare(`
-    UPDATE users
-    SET
-      full_name = ?,
-      role = ?,
-      status = ?,
-      updated_at = ?
-    WHERE id = ?
-  `).run(
-    nextName,
-    nextRole,
-    nextStatus,
-    now,
-    id
-  );
-
-  if (nextStatus === INACTIVE) {
-    db.prepare(`
-      UPDATE password_reset_tokens
-      SET used_at = ?
-      WHERE user_id = ?
-        AND used_at IS NULL
-    `).run(now, id);
+    if (
+      Number(
+        membershipCount?.total || 0
+      ) > 1
+    ) {
+      return res.status(409).json({
+        success: false,
+        code:
+          "GLOBAL_ROLE_CONFLICT",
+        message:
+          "This user belongs to multiple organisations. Role changes are blocked until organisation-specific roles are introduced.",
+      });
+    }
   }
 
+  const now =
+    new Date().toISOString();
+
+  const updateUser =
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE users
+        SET full_name = ?,
+            role = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        nextName,
+        nextRole,
+        now,
+        id
+      );
+
+      db.prepare(`
+        UPDATE organisation_memberships
+        SET status = ?,
+            updated_at = ?
+        WHERE organisation_id = ?
+          AND user_id = ?
+      `).run(
+        nextStatus,
+        now,
+        organisationId,
+        id
+      );
+
+      const remainingActive =
+        activeMembershipCount(id);
+
+      const nextAccountStatus =
+        remainingActive > 0
+          ? ACTIVE
+          : INACTIVE;
+
+      db.prepare(`
+        UPDATE users
+        SET status = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        nextAccountStatus,
+        now,
+        id
+      );
+
+      if (
+        nextAccountStatus ===
+        INACTIVE
+      ) {
+        db.prepare(`
+          UPDATE password_reset_tokens
+          SET used_at = ?
+          WHERE user_id = ?
+            AND used_at IS NULL
+        `).run(
+          now,
+          id
+        );
+      }
+    });
+
+  updateUser();
+
   writeAudit(
+    organisationId,
+    req.accessUser?.id,
     "USER_UPDATED",
     id,
-    `${nextName} updated: role=${nextRole}, status=${nextStatus}.`
+    `${nextName} updated in ${req.organisation.name}: role=${nextRole}, membershipStatus=${nextStatus}.`
   );
 
-  const updated = db.prepare(`
-    SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
-    WHERE id = ?
-  `).get(id);
+  const updated =
+    getOrganisationUser(
+      organisationId,
+      id
+    );
 
   return res.json({
     success: true,
@@ -415,11 +711,18 @@ router.patch("/:id", (req, res) => {
 router.post(
   "/:id/reset-password",
   async (req, res) => {
+    const organisationId =
+      requireOrganisationId(req);
+
     const id =
-      String(req.params.id || "").trim();
+      String(
+        req.params.id || ""
+      ).trim();
 
     const password =
-      String(req.body?.password || "");
+      String(
+        req.body?.password || ""
+      );
 
     if (!validPassword(password)) {
       return res.status(400).json({
@@ -429,12 +732,11 @@ router.post(
       });
     }
 
-    const user = db.prepare(`
-      SELECT *
-      FROM users
-      WHERE id = ?
-      LIMIT 1
-    `).get(id);
+    const user =
+      getOrganisationUser(
+        organisationId,
+        id
+      );
 
     if (!user) {
       return res.status(404).json({
@@ -443,8 +745,23 @@ router.post(
       });
     }
 
+    if (
+      user.membership_status !==
+        ACTIVE ||
+      user.status !== ACTIVE
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Only active users in the selected organisation can have their password reset.",
+      });
+    }
+
     const hash =
-      await bcrypt.hash(password, 12);
+      await bcrypt.hash(
+        password,
+        12
+      );
 
     const now =
       new Date().toISOString();
@@ -453,9 +770,8 @@ router.post(
       db.transaction(() => {
         db.prepare(`
           UPDATE users
-          SET
-            password_hash = ?,
-            updated_at = ?
+          SET password_hash = ?,
+              updated_at = ?
           WHERE id = ?
         `).run(
           hash,
@@ -477,9 +793,11 @@ router.post(
     transaction();
 
     writeAudit(
+      organisationId,
+      req.accessUser?.id,
       "USER_PASSWORD_ADMIN_RESET",
       id,
-      `An Administrator reset the password for ${user.full_name}.`
+      `An Administrator reset the password for ${user.full_name} in ${req.organisation.name}.`
     );
 
     return res.json({

@@ -46,6 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use(
   "/api/users",
   requireAuth,
+  requireOrganisation,
   userRoutes
 );
 
