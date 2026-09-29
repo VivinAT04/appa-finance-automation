@@ -12,6 +12,14 @@ const {
   seedEnterpriseData,
 } = require("./seedEnterpriseData");
 
+const {
+  runScenarios,
+  seedScenarios,
+  getScenarioInvoices,
+  getScenarioResults,
+  removeScenarioData,
+} = require("./scenarioService");
+
 const router = express.Router();
 
 /* =========================================================
@@ -1223,6 +1231,105 @@ router.post(
       purchaseOrder:
         result.po.po_number,
     });
+  }
+);
+
+
+/* APPA SYNTHETIC WORKFLOW SCENARIOS */
+
+router.post(
+  "/scenarios/run",
+  async (_req, res, next) => {
+    try {
+      const result =
+        await runScenarios();
+
+      res.json({
+        success:
+          result.summary.allPassed,
+        message:
+          result.summary.allPassed
+            ? "All synthetic AP workflow scenarios passed."
+            : "One or more synthetic AP workflow scenarios failed.",
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  "/scenarios/seed",
+  (_req, res, next) => {
+    try {
+      const result = seedScenarios();
+
+      res.status(201).json({
+        success: true,
+        message:
+          "Synthetic AP workflow scenarios prepared.",
+        result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  "/scenarios",
+  (_req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        scenarios:
+          getScenarioInvoices(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  "/scenarios/results",
+  (_req, res, next) => {
+    try {
+      const results =
+        getScenarioResults();
+
+      res.json({
+        success: true,
+        total: results.length,
+        passed:
+          results.filter(
+            (item) => item.passed
+          ).length,
+        results,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.delete(
+  "/scenarios",
+  (_req, res, next) => {
+    try {
+      const result =
+        removeScenarioData();
+
+      res.json({
+        success: true,
+        message:
+          "Synthetic scenario data removed.",
+        result,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 

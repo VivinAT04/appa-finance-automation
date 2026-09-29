@@ -250,3 +250,46 @@ export async function submitRPAResult({
   return response.data;
 }
 
+
+/* APPA SYNTHETIC WORKFLOW SCENARIOS */
+
+export async function seedWorkflowScenarios() {
+  const response = await api.post(
+    "/enterprise/scenarios/seed"
+  );
+
+  return response.data;
+}
+
+export async function getWorkflowScenarios() {
+  const response = await api.get(
+    "/enterprise/scenarios"
+  );
+
+  return response.data.scenarios;
+}
+
+export async function getWorkflowScenarioResults() {
+  const response = await api.get(
+    "/enterprise/scenarios/results"
+  );
+
+  return response.data;
+}
+
+export async function resetWorkflowScenarios() {
+  const response = await api.delete(
+    "/enterprise/scenarios"
+  );
+
+  return response.data;
+}
+
+
+export async function runWorkflowScenarios() {
+  const response = await api.post(
+    "/enterprise/scenarios/run"
+  );
+
+  return response.data;
+}
