@@ -16,6 +16,7 @@ import {
 import {
   getInvoices,
   getPurchaseOrders,
+  getSuppliers,
   getApprovals,
   getPendingApprovals,
   getExceptions,
@@ -30,6 +31,8 @@ import {
 } from "../api";
 
 import InvoiceOperations from "./InvoiceOperations";
+import PurchaseOrderOperations from "./PurchaseOrderOperations";
+import SupplierOperations from "./SupplierOperations";
 import ApprovalOperations from "./ApprovalOperations";
 import ExceptionWorkbench from "./ExceptionWorkbench";
 
@@ -155,6 +158,10 @@ export default function EnterpriseModule({ module }) {
 
         case "Purchase Orders":
           setRows(await getPurchaseOrders());
+          break;
+
+        case "Suppliers":
+          setRows(await getSuppliers());
           break;
 
         case "Approvals": {
@@ -381,11 +388,20 @@ export default function EnterpriseModule({ module }) {
       )}
 
       {module === "Purchase Orders" && (
-        <PurchaseOrdersView
+        <PurchaseOrderOperations
           rows={rows}
           onRefresh={load}
         />
       )}
+
+      {module === "Suppliers" && (
+        <SupplierOperations
+          rows={rows}
+          onRefresh={load}
+        />
+      )}
+
+
 
       {module === "Approvals" && (
         <ApprovalOperations

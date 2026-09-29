@@ -64,7 +64,7 @@ function ensureSupplier() {
     "APPA Scenario Supplies Ltd",
     "scenario-supplier@example.test",
     "GST-APPA-SCENARIO",
-    "30 days",
+    30,
     "Active",
     timestamp,
     timestamp

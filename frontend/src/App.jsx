@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Building2,
   LayoutDashboard,
   FileText,
   ReceiptText,
@@ -32,14 +33,15 @@ import AuditLogs from "./components/AuditLogs";
 import LiveDashboard from "./components/LiveDashboard";
 import "./App.css";
 
-const navigation = [
+const baseNavigation = [
   { name: "Dashboard", icon: LayoutDashboard },
   { name: "Documents", icon: FileText },
   { name: "Invoices", icon: ReceiptText },
   { name: "Purchase Orders", icon: ShoppingCart },
-  { name: "Approvals", icon: CheckCircle2, count: operationsSummary.pendingApprovals },
+  { name: "Suppliers", icon: Building2 },
+  { name: "Approvals", icon: CheckCircle2 },
   { name: "Automation", icon: Bot },
-  { name: "Exceptions", icon: TriangleAlert, count: operationsSummary.openExceptions },
+  { name: "Exceptions", icon: TriangleAlert },
   { name: "Audit Logs", icon: ScrollText },
   { name: "Reports", icon: BarChart3 },
 ];
@@ -66,6 +68,24 @@ function App() {
       exceptionInvoices: 0,
       automationStatus: "Idle",
     });
+
+  const navigation = baseNavigation.map((item) => {
+    if (item.name === "Approvals") {
+      return {
+        ...item,
+        count: operationsSummary.pendingApprovals,
+      };
+    }
+
+    if (item.name === "Exceptions") {
+      return {
+        ...item,
+        count: operationsSummary.openExceptions,
+      };
+    }
+
+    return item;
+  });
 
   async function refreshOperationsSummary() {
     try {
