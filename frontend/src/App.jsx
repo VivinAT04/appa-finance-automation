@@ -539,6 +539,19 @@ function App() {
 
 
   const [active, setActive] = useState("Dashboard");
+  const [documentUploadRequest, setDocumentUploadRequest] =
+    useState(null);
+
+  function openDocumentUpload(
+    documentType = null
+  ) {
+    setDocumentUploadRequest({
+      id: Date.now(),
+      documentType,
+    });
+
+    handleNavigation("Documents");
+  }
 
   function handleNavigation(name) {
     setActive(name);
@@ -982,12 +995,24 @@ function App() {
             </div>
 
             <div className="heading-actions">
-              <button className="secondary-button">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  openDocumentUpload()
+                }
+              >
                 <Upload size={17} />
                 Upload document
               </button>
 
-              <button className="primary-button">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() =>
+                  openDocumentUpload("Invoice")
+                }
+              >
                 <Plus size={17} />
                 New invoice
               </button>
@@ -999,7 +1024,11 @@ function App() {
               currentUser={authUser}
             />
           ) : active === "Documents" ? (
-            <Documents />
+            <Documents
+              uploadRequest={
+                documentUploadRequest
+              }
+            />
           ) : active === "Dashboard" ? (
             <LiveDashboard
               dashboard={dashboard}

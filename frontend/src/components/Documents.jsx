@@ -37,8 +37,11 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-export default function Documents() {
+export default function Documents({
+  uploadRequest = null,
+}) {
   const inputRef = useRef(null);
+  const handledUploadRequestRef = useRef(null);
 
   const [documents, setDocuments] = useState([]);
   const [search, setSearch] = useState("");
@@ -72,6 +75,36 @@ export default function Documents() {
     loadDocuments();
   }, []);
 
+  useEffect(() => {
+    if (!uploadRequest?.id) return;
+
+    if (
+      handledUploadRequestRef.current ===
+      uploadRequest.id
+    ) {
+      return;
+    }
+
+    handledUploadRequestRef.current =
+      uploadRequest.id;
+
+    if (uploadRequest.documentType) {
+      setDocumentType(
+        uploadRequest.documentType
+      );
+    }
+
+    const frame = window.requestAnimationFrame(
+      () => {
+        inputRef.current?.click();
+      }
+    );
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [uploadRequest]);
+
   async function submitUpload(event) {
     event.preventDefault();
 
@@ -84,10 +117,25 @@ export default function Documents() {
       setError("");
       setUploading(true);
 
-      await uploadDocument(
-        selectedFile,
-        documentType
-      );
+      const uploadedDocument =
+        await uploadDocument(
+          selectedFile,
+          documentType
+        );
+
+      if (documentType === "Invoice") {
+        const invoice = await processInvoice(
+          uploadedDocument.id
+        );
+
+        setMessage(
+          `Invoice ${invoice.invoiceNumber || selectedFile.name} processed automatically at ${invoice.extractionConfidence}% confidence.`
+        );
+      } else {
+        setMessage(
+          `${selectedFile.name} uploaded successfully.`
+        );
+      }
 
       setSelectedFile(null);
 
