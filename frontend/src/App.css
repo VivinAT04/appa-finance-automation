@@ -6735,3 +6735,647 @@ input:-webkit-autofill {
     min-width: 0;
   }
 }
+
+
+/* ============================================================
+   APPA RESPONSIVE FOUNDATION V2
+   Cross-browser tablet + mobile presentation layer
+   ============================================================ */
+
+html {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* ---------- TABLET / OFF-CANVAS SHELL ---------- */
+
+@media (max-width: 960px) {
+  html,
+  body,
+  #root {
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .main {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: 0;
+  }
+
+  .topbar {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .content {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sidebar {
+    margin: 0;
+  }
+
+  .page-heading,
+  .metric-grid,
+  .dashboard-grid,
+  .bottom-grid,
+  .panel {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+
+/* ============================================================
+   MOBILE — PURPOSE-BUILT LAYOUT
+   ============================================================ */
+
+@media (max-width: 720px) {
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    background: #f6f8f6;
+    overflow-x: hidden;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  /* ---------- MOBILE HEADER ---------- */
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    min-height: 64px;
+    height: 64px;
+    padding: 0 16px;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.98);
+  }
+
+  .mobile-menu-button,
+  .sidebar-close-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-topbar-brand {
+    min-width: 0;
+    flex: 1;
+    gap: 8px;
+  }
+
+  .mobile-topbar-brand img {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    object-fit: contain;
+  }
+
+  .mobile-topbar-brand span {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .topbar-right {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .topbar .search-box,
+  .topbar-search,
+  .environment-badge {
+    display: none;
+  }
+
+  /* ---------- MOBILE PAGE ---------- */
+
+  .content {
+    padding: 20px 16px 32px;
+    overflow-x: hidden;
+  }
+
+  .page-heading {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    margin: 0 0 22px;
+  }
+
+  .page-heading > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .eyebrow {
+    margin-bottom: 7px;
+    font-size: 11px;
+    line-height: 1.3;
+    letter-spacing: 0.11em;
+  }
+
+  .page-heading h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.12;
+    letter-spacing: -0.035em;
+  }
+
+  .page-heading p {
+    max-width: none;
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* ---------- MOBILE ACTIONS ---------- */
+
+  .heading-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .heading-actions button,
+  .heading-actions .primary-button,
+  .heading-actions .secondary-button,
+  .primary-button,
+  .secondary-button {
+    min-height: 46px;
+    font-size: 14px;
+  }
+
+  .heading-actions button {
+    width: 100%;
+  }
+
+  /* ---------- MOBILE DASHBOARD METRICS ---------- */
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .metric-card {
+    width: 100%;
+    min-width: 0;
+    min-height: 132px;
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .metric-label {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .metric-value {
+    margin-top: 10px;
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: -0.035em;
+  }
+
+  .metric-sub {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  /* ---------- MOBILE DASHBOARD PANELS ---------- */
+
+  .dashboard-grid,
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    width: 100%;
+  }
+
+  .panel {
+    width: 100%;
+    min-width: 0;
+    padding: 18px;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .panel-heading h2,
+  .panel-heading h3 {
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .text-button {
+    min-height: 40px;
+    padding: 8px 4px;
+    font-size: 13px;
+  }
+
+  /* ---------- MOBILE TABLE BEHAVIOUR ---------- */
+
+  .table-wrap,
+  .table-container,
+  .invoice-table-wrap,
+  .procurement-table-wrap,
+  .audit-table-wrap,
+  .report-table-wrap,
+  .automation-table-wrap {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    font-size: 13px;
+  }
+
+  th,
+  td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  /* ---------- MOBILE CARDS / MODULES ---------- */
+
+  .document-workspace,
+  .invoice-workspace,
+  .procurement-workspace,
+  .automation-workspace,
+  .reporting-grid,
+  .supplier-grid,
+  .exception-grid {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* ---------- MOBILE FORMS ---------- */
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  textarea {
+    min-height: 110px;
+  }
+
+  /* ---------- MOBILE MODALS ---------- */
+
+  .modal,
+  .modal-card,
+  .modal-content,
+  .dialog,
+  .dialog-card {
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+
+  /* ---------- MOBILE DRAWER ---------- */
+
+  .sidebar {
+    width: min(86vw, 320px);
+    max-width: 320px;
+  }
+
+  .sidebar nav button,
+  .sidebar .nav-item {
+    min-height: 44px;
+  }
+
+  /* ---------- MOBILE TOUCH TARGETS ---------- */
+
+  button,
+  [role="button"],
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 480px) {
+  .content {
+    padding: 18px 16px 28px;
+  }
+
+  .page-heading {
+    margin-bottom: 20px;
+  }
+
+  .page-heading h1 {
+    font-size: 27px;
+  }
+
+  .metric-card {
+    min-height: 128px;
+    padding: 17px;
+  }
+
+  .metric-value {
+    font-size: 31px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+}
+
+
+/* ============================================================
+   VERY SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 360px) {
+  .topbar {
+    padding-inline: 12px;
+  }
+
+  .content {
+    padding-inline: 12px;
+  }
+
+  .mobile-topbar-brand span {
+    font-size: 13px;
+  }
+
+  .page-heading h1 {
+    font-size: 25px;
+  }
+
+  .metric-card {
+    padding: 16px;
+  }
+}
+
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .mobile-sidebar-backdrop,
+  .content,
+  .page-heading,
+  .metric-card,
+  .panel {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   APPA MOBILE QA — SIDEBAR / DRAWER STRUCTURE FIX
+   ============================================================ */
+
+/*
+ * Mobile navigation must behave as an application drawer:
+ *
+ *   brand/header
+ *   workspace
+ *   scrollable navigation
+ *   account/footer
+ *
+ * The sidebar itself owns the viewport height. Navigation is the
+ * flexible/scrollable region so footer content never collides
+ * with menu items on short Chrome/Safari mobile viewports.
+ */
+
+@media (max-width: 960px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: auto;
+    left: 0;
+
+    width: min(320px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100vh;
+    max-height: 100dvh;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+    overscroll-behavior: contain;
+
+    padding-bottom: 0;
+
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /*
+   * Prevent any direct sidebar child from forcing the drawer
+   * beyond the available mobile viewport.
+   */
+  .sidebar > * {
+    flex-shrink: 0;
+    min-width: 0;
+  }
+
+  /*
+   * Navigation owns remaining vertical space.
+   * It scrolls independently when the phone is short.
+   */
+  .navigation {
+    flex: 1 1 auto;
+    min-height: 0;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+
+    scrollbar-width: thin;
+  }
+
+  /*
+   * Account/profile footer must remain in normal flex flow.
+   * It must never float over navigation links.
+   */
+  .sidebar-bottom {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+
+    flex: 0 0 auto;
+
+    width: auto;
+    min-width: 0;
+
+    margin-top: 0;
+
+    z-index: 2;
+  }
+
+  /*
+   * If older desktop rules position the profile absolutely,
+   * explicitly return it to normal mobile document flow.
+   */
+  .sidebar .profile,
+  .sidebar .user-profile,
+  .sidebar .sidebar-profile {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+
+    width: auto;
+    min-width: 0;
+  }
+
+  /*
+   * Drawer backdrop must cover only the viewport and remain
+   * independent from document height.
+   */
+  .mobile-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+
+    overscroll-behavior: none;
+  }
+
+  body.appa-mobile-nav-open {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}
+
+/*
+ * Short phones need tighter vertical rhythm so more navigation
+ * remains visible before scrolling.
+ */
+@media (max-width: 480px) {
+  .sidebar {
+    width: min(320px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+  }
+
+  .navigation {
+    padding-bottom: 8px;
+  }
+
+  .navigation button,
+  .navigation a {
+    min-height: 44px;
+  }
+}
+
+/*
+ * Extra-short mobile landscape / browser-tool viewports.
+ * The navigation remains scrollable instead of colliding with
+ * the account footer.
+ */
+@media (max-width: 960px) and (max-height: 700px) {
+  .navigation {
+    overflow-y: auto;
+  }
+
+  .sidebar-bottom {
+    flex-shrink: 0;
+  }
+}
+
+/*
+ * Safari fallback for versions where dynamic viewport units
+ * behave differently while browser chrome expands/collapses.
+ */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 960px) {
+    .sidebar {
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    .mobile-sidebar-backdrop {
+      height: 100vh;
+      height: 100dvh;
+    }
+  }
+}
