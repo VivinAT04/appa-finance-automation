@@ -462,3 +462,158 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15E — RESPONSIVE ENTERPRISE SETTINGS FALLBACK
+   ============================================================ */
+
+.enterprise-module,
+.enterprise-heading,
+.enterprise-heading-actions,
+.enterprise-grid,
+.enterprise-card,
+.enterprise-card-top,
+.enterprise-card-actions,
+.enterprise-detail-grid,
+.enterprise-table-wrapper,
+.enterprise-info-banner,
+.enterprise-resolution {
+  min-width: 0;
+}
+
+.enterprise-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.enterprise-table {
+  width: 100%;
+}
+
+.enterprise-description,
+.enterprise-meta-line,
+.enterprise-table-primary,
+.enterprise-resolution,
+.enterprise-info-banner {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .enterprise-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .enterprise-table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 960px) {
+  .enterprise-heading {
+    gap: 14px;
+  }
+
+  .enterprise-heading-actions {
+    flex-wrap: wrap;
+  }
+
+  .enterprise-grid,
+  .enterprise-detail-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .enterprise-table {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 720px) {
+  .enterprise-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .enterprise-heading-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .enterprise-heading-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .enterprise-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .enterprise-card-top {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .enterprise-card-actions {
+    flex-wrap: wrap;
+  }
+
+  .enterprise-primary-button,
+  .enterprise-secondary-button,
+  .enterprise-approve-button,
+  .enterprise-reject-button {
+    min-height: 44px;
+  }
+
+  .enterprise-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .enterprise-table {
+    min-width: 640px;
+  }
+
+  .enterprise-table th,
+  .enterprise-table td {
+    white-space: nowrap;
+  }
+
+  .enterprise-table-primary {
+    min-width: 150px;
+    white-space: normal;
+  }
+
+  .enterprise-full-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .enterprise-heading-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .enterprise-table {
+    min-width: 600px;
+  }
+
+  .enterprise-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .enterprise-card-actions button {
+    width: 100%;
+  }
+}

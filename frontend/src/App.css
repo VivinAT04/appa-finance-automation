@@ -6393,3 +6393,312 @@ input:-webkit-autofill {
     min-height: 140px;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15E — RESPONSIVE USERS + ACCOUNT SECURITY
+   ============================================================ */
+
+.user-management,
+.user-management-hero,
+.user-management-actions,
+.user-metric-grid,
+.user-directory-card,
+.user-directory-header,
+.user-search,
+.user-table-wrap,
+.user-identity,
+.user-select-wrap,
+.user-row-actions,
+.user-modal,
+.user-modal-header,
+.user-form,
+.user-form-actions,
+.user-reset-person,
+.account-security,
+.account-security-heading,
+.security-form,
+.security-password-grid,
+.security-field,
+.security-input-wrap,
+.security-requirements,
+.security-footer,
+.settings-security-stack {
+  min-width: 0;
+}
+
+.user-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.user-table {
+  width: 100%;
+}
+
+.user-identity,
+.user-reset-person,
+.user-form-note,
+.user-governance-note,
+.security-requirements,
+.security-feedback {
+  overflow-wrap: anywhere;
+}
+
+.user-form input,
+.user-form select,
+.security-input-wrap,
+.security-input-wrap input {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .user-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .user-table {
+    min-width: 880px;
+  }
+
+  .security-password-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .user-management-hero,
+  .user-directory-header,
+  .account-security-heading {
+    gap: 14px;
+  }
+
+  .user-management-actions {
+    flex-wrap: wrap;
+  }
+
+  .user-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  .user-table {
+    min-width: 840px;
+  }
+
+  .user-modal {
+    width: min(580px, calc(100vw - 36px));
+    max-width: calc(100vw - 36px);
+    max-height: calc(100dvh - 36px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .user-management-hero,
+  .user-directory-header,
+  .account-security-heading {
+    align-items: flex-start;
+  }
+
+  .user-management-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .user-management-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .user-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .user-directory-card,
+  .account-security {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .user-directory-header {
+    flex-direction: column;
+  }
+
+  .user-search {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .user-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .user-table-wrap {
+    overflow-x: auto;
+  }
+
+  .user-table {
+    min-width: 800px;
+  }
+
+  .user-table th,
+  .user-table td {
+    white-space: nowrap;
+  }
+
+  .user-identity {
+    min-width: 190px;
+  }
+
+  .user-identity strong,
+  .user-identity span:not(.user-avatar),
+  .user-identity small {
+    white-space: normal;
+  }
+
+  .user-select-wrap {
+    min-width: 145px;
+  }
+
+  .user-select-wrap select {
+    width: 100%;
+  }
+
+  .user-row-actions {
+    min-width: 170px;
+    flex-wrap: wrap;
+  }
+
+  .user-row-button,
+  .user-icon-button {
+    min-height: 40px;
+  }
+
+  .user-modal-backdrop {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .user-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    border-radius: 18px 18px 12px 12px;
+  }
+
+  .user-modal-header {
+    align-items: flex-start;
+  }
+
+  .user-form {
+    width: 100%;
+  }
+
+  .user-form > label,
+  .security-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .user-form input,
+  .user-form select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .user-form-actions {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .user-form-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .security-password-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .security-input-wrap {
+    width: 100%;
+  }
+
+  .security-input-wrap input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .security-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .security-footer > div {
+    width: 100%;
+  }
+
+  .security-footer button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .user-governance-note {
+    box-sizing: border-box;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-management-actions,
+  .user-metric-grid,
+  .user-form-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .user-table {
+    min-width: 760px;
+  }
+
+  .user-modal-backdrop {
+    padding: 8px;
+  }
+
+  .user-modal {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .user-modal-header,
+  .user-form {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .account-security {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

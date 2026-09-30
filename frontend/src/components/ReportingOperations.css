@@ -891,3 +891,139 @@
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15E — RESPONSIVE SETTINGS OPERATIONS
+   ============================================================ */
+
+.settings-panel,
+.settings-overview,
+.settings-grid,
+.settings-card,
+.settings-card-heading,
+.settings-description,
+.settings-input-wrap,
+.settings-toggle,
+.settings-meta,
+.settings-actions,
+.settings-governance {
+  min-width: 0;
+}
+
+.settings-description,
+.settings-meta,
+.settings-governance {
+  overflow-wrap: anywhere;
+}
+
+.settings-input-wrap,
+.settings-input-wrap input {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .settings-overview {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .settings-panel .reporting-header {
+    gap: 14px;
+  }
+
+  .settings-overview,
+  .settings-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .settings-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-panel .reporting-header {
+    align-items: flex-start;
+  }
+
+  .settings-panel .reporting-refresh {
+    min-height: 44px;
+  }
+
+  .settings-overview article {
+    min-width: 0;
+  }
+
+  .settings-card-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .settings-input-wrap {
+    width: 100%;
+  }
+
+  .settings-input-wrap input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-toggle {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .settings-toggle-track {
+    flex: 0 0 auto;
+  }
+
+  .settings-meta {
+    width: 100%;
+  }
+
+  .settings-actions {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .settings-primary,
+  .settings-secondary {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .settings-governance {
+    box-sizing: border-box;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .settings-card {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .settings-toggle {
+    flex-direction: column;
+  }
+}
