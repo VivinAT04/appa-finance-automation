@@ -13,29 +13,33 @@ function getJwtSecret() {
   return secret;
 }
 
-function getCurrentUser(userId) {
+async function getCurrentUser(userId) {
   if (!userId) {
     return null;
   }
 
-  return db.prepare(`
-    SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
-    WHERE id = ?
-    LIMIT 1
-  `).get(userId);
+  return db.one(
+    `
+      SELECT
+        id,
+        email,
+        full_name,
+        role,
+        status,
+        last_login_at,
+        created_at,
+        updated_at
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [userId]
+  );
 }
 
-function requireAuth(req, res, next) {
-  const authorization = req.headers.authorization || "";
+async function requireAuth(req, res, next) {
+  const authorization =
+    req.headers.authorization || "";
 
   if (!authorization.startsWith("Bearer ")) {
     return res.status(401).json({
@@ -44,7 +48,8 @@ function requireAuth(req, res, next) {
     });
   }
 
-  const token = authorization.slice(7).trim();
+  const token =
+    authorization.slice(7).trim();
 
   if (!token) {
     return res.status(401).json({
@@ -54,25 +59,33 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, getJwtSecret(), {
-      algorithms: ["HS256"],
-      issuer: "appa-finance",
-      audience: "appa-finance-web",
-    });
+    const payload = jwt.verify(
+      token,
+      getJwtSecret(),
+      {
+        algorithms: ["HS256"],
+        issuer: "appa-finance",
+        audience: "appa-finance-web",
+      }
+    );
 
-    const user = getCurrentUser(payload.sub);
+    const user =
+      await getCurrentUser(payload.sub);
 
-    if (!user || user.status !== "Active") {
+    if (
+      !user ||
+      user.status !== "Active"
+    ) {
       return res.status(401).json({
         success: false,
-        message: "User account is unavailable.",
+        message:
+          "User account is unavailable.",
       });
     }
 
     /*
-     * IMPORTANT:
-     * The database is the source of truth for mutable account data.
-     * We deliberately do not trust role/status/name from an older JWT.
+     * The database remains the source of truth
+     * for mutable account information.
      */
     req.user = {
       id: user.id,
@@ -88,7 +101,8 @@ function requireAuth(req, res, next) {
   } catch (_error) {
     return res.status(401).json({
       success: false,
-      message: "Your session is invalid or has expired.",
+      message:
+        "Your session is invalid or has expired.",
     });
   }
 }

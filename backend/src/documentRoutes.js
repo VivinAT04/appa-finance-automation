@@ -47,131 +47,155 @@ const upload = multer({
   },
 });
 
-function createAudit(
+async function createAudit(
   organisationId,
   action,
   entityType,
   entityId,
   description
 ) {
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
+  await db.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        action,
+        entity_type,
+        entity_id,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+    [
+      randomUUID(),
       action,
-      entity_type,
-      entity_id,
+      entityType,
+      entityId,
       description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    action,
-    entityType,
-    entityId,
-    description,
-    new Date().toISOString(),
-    organisationId
+      new Date().toISOString(),
+      organisationId,
+    ]
   );
 }
 
-router.get("/", (req, res) => {
-  const organisationId = req.organisation.id;
+router.get("/", async (req, res, next) => {
+  try {
+    const organisationId = req.organisation.id;
 
-  const documents = db.prepare(`
-    SELECT
-      id,
-      original_name AS originalName,
-      mime_type AS mimeType,
-      size,
-      document_type AS documentType,
-      status,
-      extraction_status AS extractionStatus,
-      uploaded_by AS uploadedBy,
-      created_at AS createdAt
-    FROM documents
-    WHERE organisation_id = ?
-    ORDER BY created_at DESC
-  `).all(organisationId);
+    const documents = await db.many(
+      `
+        SELECT
+          id,
+          original_name AS "originalName",
+          mime_type AS "mimeType",
+          size,
+          document_type AS "documentType",
+          status,
+          extraction_status AS "extractionStatus",
+          uploaded_by AS "uploadedBy",
+          created_at AS "createdAt"
+        FROM documents
+        WHERE organisation_id = $1
+        ORDER BY created_at DESC
+      `,
+      [organisationId]
+    );
 
-  res.json({
-    success: true,
-    documents,
-  });
+    return res.json({
+      success: true,
+      documents,
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.get("/:id", (req, res) => {
-  const organisationId = req.organisation.id;
+router.get("/:id", async (req, res, next) => {
+  try {
+    const organisationId = req.organisation.id;
 
-  const document = db.prepare(`
-    SELECT
-      id,
-      original_name AS originalName,
-      stored_name AS storedName,
-      mime_type AS mimeType,
-      size,
-      document_type AS documentType,
-      status,
-      extraction_status AS extractionStatus,
-      uploaded_by AS uploadedBy,
-      created_at AS createdAt
-    FROM documents
-    WHERE id = ?
-      AND organisation_id = ?
-  `).get(
-    req.params.id,
-    organisationId
-  );
+    const document = await db.one(
+      `
+        SELECT
+          id,
+          original_name AS "originalName",
+          stored_name AS "storedName",
+          mime_type AS "mimeType",
+          size,
+          document_type AS "documentType",
+          status,
+          extraction_status AS "extractionStatus",
+          uploaded_by AS "uploadedBy",
+          created_at AS "createdAt"
+        FROM documents
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [
+        req.params.id,
+        organisationId,
+      ]
+    );
 
-  if (!document) {
-    return res.status(404).json({
-      success: false,
-      message: "Document not found.",
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      document,
     });
+  } catch (error) {
+    return next(error);
   }
-
-  res.json({
-    success: true,
-    document,
-  });
 });
 
-router.get("/:id/file", (req, res) => {
-  const organisationId = req.organisation.id;
+router.get("/:id/file", async (req, res, next) => {
+  try {
+    const organisationId = req.organisation.id;
 
-  const document = db.prepare(`
-    SELECT
-      original_name,
-      stored_name
-    FROM documents
-    WHERE id = ?
-      AND organisation_id = ?
-  `).get(
-    req.params.id,
-    organisationId
-  );
+    const document = await db.one(
+      `
+        SELECT
+          original_name,
+          stored_name
+        FROM documents
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [
+        req.params.id,
+        organisationId,
+      ]
+    );
 
-  if (!document) {
-    return res.status(404).json({
-      success: false,
-      message: "Document not found.",
-    });
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found.",
+      });
+    }
+
+    const filePath = path.join(
+      uploadDir,
+      document.stored_name
+    );
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "Stored file could not be found.",
+      });
+    }
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    return next(error);
   }
-
-  const filePath = path.join(
-    uploadDir,
-    document.stored_name
-  );
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({
-      success: false,
-      message: "Stored file could not be found.",
-    });
-  }
-
-  res.sendFile(filePath);
 });
 
 router.post(
@@ -191,8 +215,9 @@ router.post(
     );
   },
 
-  (req, res) => {
-    if (!req.file) {
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
       return res.status(400).json({
         success: false,
         message: "Choose a document to upload.",
@@ -218,38 +243,42 @@ router.post(
       req.user?.email ||
       "Authenticated User";
 
-    db.prepare(`
-      INSERT INTO documents (
+    await db.execute(
+      `
+        INSERT INTO documents (
+          id,
+          original_name,
+          stored_name,
+          mime_type,
+          size,
+          document_type,
+          status,
+          extraction_status,
+          uploaded_by,
+          created_at,
+          organisation_id
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11
+        )
+      `,
+      [
         id,
-        original_name,
-        stored_name,
-        mime_type,
-        size,
-        document_type,
-        status,
-        extraction_status,
-        uploaded_by,
-        created_at,
-        organisation_id
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `).run(
-      id,
-      req.file.originalname,
-      req.file.filename,
-      req.file.mimetype,
-      req.file.size,
-      documentType,
-      "Uploaded",
-      "Pending",
-      uploadedBy,
-      now,
-      organisationId
+        req.file.originalname,
+        req.file.filename,
+        req.file.mimetype,
+        req.file.size,
+        documentType,
+        "Uploaded",
+        "Pending",
+        uploadedBy,
+        now,
+        organisationId,
+      ]
     );
 
-    createAudit(
+    await createAudit(
       organisationId,
       "DOCUMENT_UPLOADED",
       "document",
@@ -257,29 +286,35 @@ router.post(
       `${req.file.originalname} uploaded`
     );
 
-    const document = db.prepare(`
-      SELECT
+    const document = await db.one(
+      `
+        SELECT
+          id,
+          original_name AS "originalName",
+          mime_type AS "mimeType",
+          size,
+          document_type AS "documentType",
+          status,
+          extraction_status AS "extractionStatus",
+          uploaded_by AS "uploadedBy",
+          created_at AS "createdAt"
+        FROM documents
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [
         id,
-        original_name AS originalName,
-        mime_type AS mimeType,
-        size,
-        document_type AS documentType,
-        status,
-        extraction_status AS extractionStatus,
-        uploaded_by AS uploadedBy,
-        created_at AS createdAt
-      FROM documents
-      WHERE id = ?
-        AND organisation_id = ?
-    `).get(
-      id,
-      organisationId
+        organisationId,
+      ]
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       document,
     });
+    } catch (error) {
+      return next(error);
+    }
   }
 );
 

@@ -1,350 +1,168 @@
-const Database = require("better-sqlite3");
-const path = require("path");
-const fs = require("fs");
+const { Pool } = require("pg");
 
-const dataDir = path.join(__dirname, "..", "data");
-fs.mkdirSync(dataDir, { recursive: true });
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL is required for APPA PostgreSQL."
+  );
+}
 
-const db = new Database(path.join(dataDir, "appa.db"));
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  max: Number(
+    process.env.DATABASE_POOL_MAX || 10
+  ),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
 
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+pool.on("error", error => {
+  console.error(
+    "Unexpected PostgreSQL pool error:",
+    error.message
+  );
+});
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS documents (
-    id TEXT PRIMARY KEY,
-    original_name TEXT NOT NULL,
-    stored_name TEXT NOT NULL,
-    mime_type TEXT,
-    size INTEGER NOT NULL DEFAULT 0,
-    document_type TEXT NOT NULL DEFAULT 'Unclassified',
-    status TEXT NOT NULL DEFAULT 'Uploaded',
-    extraction_status TEXT NOT NULL DEFAULT 'Pending',
-    uploaded_by TEXT NOT NULL DEFAULT 'Administrator',
-    created_at TEXT NOT NULL
+async function query(text, params = []) {
+  return pool.query(text, params);
+}
+
+async function one(text, params = []) {
+  const result = await pool.query(
+    text,
+    params
   );
 
-  CREATE TABLE IF NOT EXISTS audit_logs (
-    id TEXT PRIMARY KEY,
-    action TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT,
-    description TEXT,
-    created_at TEXT NOT NULL
-  );
-`);
+  return result.rows[0] || null;
+}
 
-
-/* =========================================================
-   APPA PHASE 3 — INVOICE EXTRACTION DATA
-   ========================================================= */
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS invoices (
-    id TEXT PRIMARY KEY,
-    document_id TEXT NOT NULL UNIQUE,
-
-    invoice_number TEXT,
-    invoice_date TEXT,
-    due_date TEXT,
-
-    supplier_name TEXT,
-    supplier_email TEXT,
-    supplier_tax_id TEXT,
-
-    currency TEXT DEFAULT 'GBP',
-
-    subtotal REAL,
-    tax_amount REAL,
-    total_amount REAL,
-
-    purchase_order_number TEXT,
-
-    extraction_confidence REAL,
-    validation_status TEXT NOT NULL DEFAULT 'Pending',
-    validation_message TEXT,
-
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-
-    FOREIGN KEY (document_id)
-      REFERENCES documents(id)
-      ON DELETE CASCADE
+async function many(text, params = []) {
+  const result = await pool.query(
+    text,
+    params
   );
 
-  CREATE TABLE IF NOT EXISTS invoice_line_items (
-    id TEXT PRIMARY KEY,
-    invoice_id TEXT NOT NULL,
+  return result.rows;
+}
 
-    description TEXT,
-    quantity REAL,
-    unit_price REAL,
-    tax_rate REAL,
-    line_total REAL,
-
-    position INTEGER NOT NULL DEFAULT 0,
-
-    created_at TEXT NOT NULL,
-
-    FOREIGN KEY (invoice_id)
-      REFERENCES invoices(id)
-      ON DELETE CASCADE
+async function execute(text, params = []) {
+  const result = await pool.query(
+    text,
+    params
   );
 
-  CREATE INDEX IF NOT EXISTS idx_invoices_document
-    ON invoices(document_id);
+  return {
+    rowCount: result.rowCount,
+    rows: result.rows,
+  };
+}
 
-  CREATE INDEX IF NOT EXISTS idx_invoices_number
-    ON invoices(invoice_number);
+async function transaction(callback) {
+  const client =
+    await pool.connect();
 
-  CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice
-    ON invoice_line_items(invoice_id);
-`);
+  try {
+    await client.query("BEGIN");
 
+    const tx = {
+      query: (
+        text,
+        params = []
+      ) => client.query(
+        text,
+        params
+      ),
 
-/* APPA ENTERPRISE AP WORKFLOW */
+      one: async (
+        text,
+        params = []
+      ) => {
+        const result =
+          await client.query(
+            text,
+            params
+          );
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS suppliers (
-    id TEXT PRIMARY KEY,
-    supplier_code TEXT NOT NULL,
-    name TEXT NOT NULL,
-    email TEXT,
-    tax_id TEXT,
-    payment_terms_days INTEGER NOT NULL DEFAULT 30,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
+        return result.rows[0] || null;
+      },
 
-  CREATE TABLE IF NOT EXISTS purchase_orders (
-    id TEXT PRIMARY KEY,
-    po_number TEXT NOT NULL,
-    supplier_id TEXT NOT NULL,
-    order_date TEXT,
-    currency TEXT NOT NULL DEFAULT 'INR',
-    subtotal REAL NOT NULL DEFAULT 0,
-    tax_amount REAL NOT NULL DEFAULT 0,
-    total_amount REAL NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'Open',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+      many: async (
+        text,
+        params = []
+      ) => {
+        const result =
+          await client.query(
+            text,
+            params
+          );
 
-    FOREIGN KEY (supplier_id)
-      REFERENCES suppliers(id)
-  );
+        return result.rows;
+      },
 
-  CREATE TABLE IF NOT EXISTS purchase_order_items (
-    id TEXT PRIMARY KEY,
-    purchase_order_id TEXT NOT NULL,
-    description TEXT NOT NULL,
-    quantity REAL NOT NULL DEFAULT 0,
-    unit_price REAL NOT NULL DEFAULT 0,
-    line_total REAL NOT NULL DEFAULT 0,
-    position INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
+      execute: async (
+        text,
+        params = []
+      ) => {
+        const result =
+          await client.query(
+            text,
+            params
+          );
 
-    FOREIGN KEY (purchase_order_id)
-      REFERENCES purchase_orders(id)
-      ON DELETE CASCADE
-  );
+        return {
+          rowCount: result.rowCount,
+          rows: result.rows,
+        };
+      },
+    };
 
-  CREATE TABLE IF NOT EXISTS invoice_matches (
-    id TEXT PRIMARY KEY,
-    invoice_id TEXT NOT NULL UNIQUE,
-    purchase_order_id TEXT,
+    const result =
+      await callback(tx);
 
-    supplier_match INTEGER NOT NULL DEFAULT 0,
-    po_reference_match INTEGER NOT NULL DEFAULT 0,
-    currency_match INTEGER NOT NULL DEFAULT 0,
-    subtotal_match INTEGER NOT NULL DEFAULT 0,
-    tax_match INTEGER NOT NULL DEFAULT 0,
-    total_match INTEGER NOT NULL DEFAULT 0,
-    line_items_match INTEGER NOT NULL DEFAULT 0,
+    await client.query("COMMIT");
 
-    match_score REAL NOT NULL DEFAULT 0,
-    match_status TEXT NOT NULL,
-    variance_amount REAL NOT NULL DEFAULT 0,
-    details TEXT,
+    return result;
+  } catch (error) {
+    try {
+      await client.query(
+        "ROLLBACK"
+      );
+    } catch (rollbackError) {
+      console.error(
+        "PostgreSQL rollback failed:",
+        rollbackError.message
+      );
+    }
 
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
-    FOREIGN KEY (invoice_id)
-      REFERENCES invoices(id)
-      ON DELETE CASCADE,
+async function healthCheck() {
+  const result = await pool.query(`
+    SELECT
+      current_database() AS database,
+      current_timestamp AS server_time
+  `);
 
-    FOREIGN KEY (purchase_order_id)
-      REFERENCES purchase_orders(id)
-  );
+  return result.rows[0];
+}
 
-  CREATE TABLE IF NOT EXISTS approvals (
-    id TEXT PRIMARY KEY,
-    invoice_id TEXT NOT NULL,
-    decision TEXT NOT NULL,
-    approval_type TEXT NOT NULL,
-    approver TEXT,
-    comments TEXT,
-    created_at TEXT NOT NULL,
+async function close() {
+  await pool.end();
+}
 
-    FOREIGN KEY (invoice_id)
-      REFERENCES invoices(id)
-      ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS exceptions (
-    id TEXT PRIMARY KEY,
-    invoice_id TEXT NOT NULL,
-    exception_type TEXT NOT NULL,
-    severity TEXT NOT NULL DEFAULT 'Medium',
-    description TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Open',
-    resolution TEXT,
-    created_at TEXT NOT NULL,
-    resolved_at TEXT,
-
-    FOREIGN KEY (invoice_id)
-      REFERENCES invoices(id)
-      ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS automation_runs (
-    id TEXT PRIMARY KEY,
-    process_name TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'APPA Engine',
-    status TEXT NOT NULL,
-    items_processed INTEGER NOT NULL DEFAULT 0,
-    items_succeeded INTEGER NOT NULL DEFAULT 0,
-    items_failed INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    details TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS app_settings (
-    organisation_id TEXT NOT NULL,
-    setting_key TEXT NOT NULL,
-    setting_value TEXT NOT NULL,
-    description TEXT,
-    updated_at TEXT NOT NULL,
-
-    PRIMARY KEY (
-      organisation_id,
-      setting_key
-    ),
-
-    FOREIGN KEY (
-      organisation_id
-    )
-      REFERENCES organisations(id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier
-    ON purchase_orders(supplier_id);
-
-  CREATE INDEX IF NOT EXISTS idx_purchase_orders_number
-    ON purchase_orders(po_number);
-
-  CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po
-    ON purchase_order_items(purchase_order_id);
-
-  CREATE INDEX IF NOT EXISTS idx_invoice_matches_invoice
-    ON invoice_matches(invoice_id);
-
-  CREATE INDEX IF NOT EXISTS idx_approvals_invoice
-    ON approvals(invoice_id);
-
-  CREATE INDEX IF NOT EXISTS idx_exceptions_invoice
-    ON exceptions(invoice_id);
-`);
-
-/* =========================================================
-   APPA AUTHENTICATION
-   ========================================================= */
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
-    full_name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'Finance Analyst',
-    status TEXT NOT NULL DEFAULT 'Active',
-    last_login_at TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
-    ON users(email);
-`);
-
-/* =========================================================
-   APPA PASSWORD RECOVERY
-   ========================================================= */
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TEXT NOT NULL,
-    used_at TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_password_reset_user
-    ON password_reset_tokens(user_id);
-
-  CREATE INDEX IF NOT EXISTS idx_password_reset_hash
-    ON password_reset_tokens(token_hash);
-`);
-
-/* =========================================================
-   APPA ORGANISATIONS / WORKSPACES
-   ========================================================= */
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS organisations (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    code TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS organisation_memberships (
-    id TEXT PRIMARY KEY,
-    organisation_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-
-    FOREIGN KEY (organisation_id)
-      REFERENCES organisations(id)
-      ON DELETE CASCADE,
-
-    FOREIGN KEY (user_id)
-      REFERENCES users(id)
-      ON DELETE CASCADE,
-
-    UNIQUE (organisation_id, user_id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_org_memberships_user
-    ON organisation_memberships(user_id);
-
-  CREATE INDEX IF NOT EXISTS idx_org_memberships_org
-    ON organisation_memberships(organisation_id);
-`);
-
-const {
-  runOrganisationMigration,
-} = require("./organisationMigration");
-
-runOrganisationMigration(db);
-
-module.exports = db;
+module.exports = {
+  pool,
+  query,
+  one,
+  many,
+  execute,
+  transaction,
+  healthCheck,
+  close,
+};

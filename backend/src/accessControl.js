@@ -8,114 +8,144 @@ const ROLES = Object.freeze([
   "Auditor",
 ]);
 
-const ROLE_CAPABILITIES = Object.freeze({
-  Administrator: [
-    "users.manage",
-    "settings.manage",
-    "finance.read",
-    "finance.operate",
-    "finance.approve",
-    "audit.read",
-  ],
+const ROLE_CAPABILITIES =
+  Object.freeze({
+    Administrator: [
+      "users.manage",
+      "settings.manage",
+      "finance.read",
+      "finance.operate",
+      "finance.approve",
+      "audit.read",
+    ],
 
-  "Finance Manager": [
-    "settings.manage",
-    "finance.read",
-    "finance.operate",
-    "finance.approve",
-    "audit.read",
-  ],
+    "Finance Manager": [
+      "settings.manage",
+      "finance.read",
+      "finance.operate",
+      "finance.approve",
+      "audit.read",
+    ],
 
-  "Finance Analyst": [
-    "finance.read",
-    "finance.operate",
-  ],
+    "Finance Analyst": [
+      "finance.read",
+      "finance.operate",
+    ],
 
-  Approver: [
-    "finance.read",
-    "finance.approve",
-  ],
+    Approver: [
+      "finance.read",
+      "finance.approve",
+    ],
 
-  Auditor: [
-    "finance.read",
-    "audit.read",
-  ],
-});
+    Auditor: [
+      "finance.read",
+      "audit.read",
+    ],
+  });
 
-function getCurrentDatabaseUser(req) {
+async function getCurrentDatabaseUser(req) {
   if (!req.user?.id) {
     return null;
   }
 
-  return db.prepare(`
-    SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
-    WHERE id = ?
-    LIMIT 1
-  `).get(req.user.id);
+  return db.one(
+    `
+      SELECT
+        id,
+        email,
+        full_name,
+        role,
+        status,
+        last_login_at,
+        created_at,
+        updated_at
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [req.user.id]
+  );
 }
 
-function hasCapability(role, capability) {
+function hasCapability(
+  role,
+  capability
+) {
   return (
     ROLE_CAPABILITIES[role] || []
   ).includes(capability);
 }
 
 function requireCapability(capability) {
-  return (req, res, next) => {
-    const user = getCurrentDatabaseUser(req);
+  return async (req, res, next) => {
+    try {
+      const user =
+        await getCurrentDatabaseUser(req);
 
-    if (!user || user.status !== "Active") {
-      return res.status(401).json({
-        success: false,
-        message: "User account is unavailable.",
-      });
+      if (
+        !user ||
+        user.status !== "Active"
+      ) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "User account is unavailable.",
+        });
+      }
+
+      if (
+        !hasCapability(
+          user.role,
+          capability
+        )
+      ) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You do not have permission to perform this action.",
+        });
+      }
+
+      req.accessUser = user;
+
+      return next();
+    } catch (error) {
+      return next(error);
     }
-
-    if (!hasCapability(user.role, capability)) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You do not have permission to perform this action.",
-      });
-    }
-
-    req.accessUser = user;
-
-    return next();
   };
 }
 
 function requireRole(...roles) {
-  return (req, res, next) => {
-    const user = getCurrentDatabaseUser(req);
+  return async (req, res, next) => {
+    try {
+      const user =
+        await getCurrentDatabaseUser(req);
 
-    if (!user || user.status !== "Active") {
-      return res.status(401).json({
-        success: false,
-        message: "User account is unavailable.",
-      });
+      if (
+        !user ||
+        user.status !== "Active"
+      ) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "User account is unavailable.",
+        });
+      }
+
+      if (!roles.includes(user.role)) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You do not have permission to perform this action.",
+        });
+      }
+
+      req.accessUser = user;
+
+      return next();
+    } catch (error) {
+      return next(error);
     }
-
-    if (!roles.includes(user.role)) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You do not have permission to perform this action.",
-      });
-    }
-
-    req.accessUser = user;
-
-    return next();
   };
 }
 

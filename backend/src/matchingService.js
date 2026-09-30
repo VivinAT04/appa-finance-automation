@@ -18,7 +18,7 @@ function almostEqual(a, b, tolerance = 1) {
   );
 }
 
-function getSetting(
+async function getSetting(
   key,
   fallback,
   organisationId
@@ -27,72 +27,84 @@ function getSetting(
     return fallback;
   }
 
-  const row = db.prepare(`
-    SELECT setting_value
-    FROM app_settings
-    WHERE setting_key = ?
-      AND organisation_id = ?
-  `).get(
-    key,
-    organisationId
+  const row = await db.one(
+    `
+      SELECT setting_value
+      FROM app_settings
+      WHERE setting_key = $1
+        AND organisation_id = $2
+    `,
+    [key, organisationId]
   );
 
   return row?.setting_value ?? fallback;
 }
 
-function createAudit(
+async function createAudit(
   organisationId,
   action,
   entityType,
   entityId,
-  description
+  description,
+  client = db
 ) {
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
+  await client.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        action,
+        entity_type,
+        entity_id,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+    [
+      randomUUID(),
       action,
-      entity_type,
-      entity_id,
+      entityType,
+      entityId,
       description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    action,
-    entityType,
-    entityId,
-    description,
-    new Date().toISOString(),
-    organisationId
+      new Date().toISOString(),
+      organisationId,
+    ]
   );
 }
 
-function getInvoice(invoiceId, organisationId) {
-  return db.prepare(`
-    SELECT i.*
-    FROM invoices i
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE i.id = ?
-      AND d.organisation_id = ?
-  `).get(
-    invoiceId,
-    organisationId
+async function getInvoice(
+  invoiceId,
+  organisationId
+) {
+  return db.one(
+    `
+      SELECT i.*
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE i.id = $1
+        AND d.organisation_id = $2
+    `,
+    [invoiceId, organisationId]
   );
 }
 
-function getInvoiceItems(invoiceId) {
-  return db.prepare(`
-    SELECT *
-    FROM invoice_line_items
-    WHERE invoice_id = ?
-    ORDER BY position
-  `).all(invoiceId);
+async function getInvoiceItems(
+  invoiceId
+) {
+  return db.many(
+    `
+      SELECT *
+      FROM invoice_line_items
+      WHERE invoice_id = $1
+      ORDER BY position
+    `,
+    [invoiceId]
+  );
 }
 
-function getPurchaseOrder(
+async function getPurchaseOrder(
   poNumber,
   organisationId
 ) {
@@ -100,30 +112,36 @@ function getPurchaseOrder(
     return null;
   }
 
-  return db.prepare(`
-    SELECT
-      po.*,
-      s.name AS supplier_name,
-      s.supplier_code AS supplier_code
-    FROM purchase_orders po
-    INNER JOIN suppliers s
-      ON s.id = po.supplier_id
-      AND s.organisation_id = po.organisation_id
-    WHERE po.po_number = ?
-      AND po.organisation_id = ?
-  `).get(
-    poNumber,
-    organisationId
+  return db.one(
+    `
+      SELECT
+        po.*,
+        s.name AS supplier_name,
+        s.supplier_code AS supplier_code
+      FROM purchase_orders po
+      INNER JOIN suppliers s
+        ON s.id = po.supplier_id
+        AND s.organisation_id =
+            po.organisation_id
+      WHERE po.po_number = $1
+        AND po.organisation_id = $2
+    `,
+    [poNumber, organisationId]
   );
 }
 
-function getPurchaseOrderItems(poId) {
-  return db.prepare(`
-    SELECT *
-    FROM purchase_order_items
-    WHERE purchase_order_id = ?
-    ORDER BY position
-  `).all(poId);
+async function getPurchaseOrderItems(
+  poId
+) {
+  return db.many(
+    `
+      SELECT *
+      FROM purchase_order_items
+      WHERE purchase_order_id = $1
+      ORDER BY position
+    `,
+    [poId]
+  );
 }
 
 function compareLineItems(
@@ -133,56 +151,74 @@ function compareLineItems(
 ) {
   if (
     !invoiceItems.length ||
-    invoiceItems.length !== poItems.length
+    invoiceItems.length !==
+      poItems.length
   ) {
     return false;
   }
 
-  return invoiceItems.every((invoiceItem) => {
-    const poItem = poItems.find(
-      (candidate) =>
-        normalize(candidate.description) ===
-        normalize(invoiceItem.description)
-    );
+  return invoiceItems.every(
+    (invoiceItem) => {
+      const poItem = poItems.find(
+        (candidate) =>
+          normalize(
+            candidate.description
+          ) ===
+          normalize(
+            invoiceItem.description
+          )
+      );
 
-    if (!poItem) return false;
+      if (!poItem) {
+        return false;
+      }
 
-    return (
-      almostEqual(
-        invoiceItem.quantity,
-        poItem.quantity,
-        0
-      ) &&
-      almostEqual(
-        invoiceItem.unit_price,
-        poItem.unit_price,
-        tolerance
-      ) &&
-      almostEqual(
-        invoiceItem.line_total,
-        poItem.line_total,
-        tolerance
-      )
-    );
-  });
+      return (
+        almostEqual(
+          invoiceItem.quantity,
+          poItem.quantity,
+          0
+        ) &&
+        almostEqual(
+          invoiceItem.unit_price,
+          poItem.unit_price,
+          tolerance
+        ) &&
+        almostEqual(
+          invoiceItem.line_total,
+          poItem.line_total,
+          tolerance
+        )
+      );
+    }
+  );
 }
 
-function createException(
+async function createException(
   invoiceId,
   exceptionType,
   severity,
   description,
   organisationId
 ) {
-  const existing = db.prepare(`
-    SELECT id
-    FROM exceptions
-    WHERE invoice_id = ?
-      AND exception_type = ?
-      AND status = 'Open'
-  `).get(
-    invoiceId,
-    exceptionType
+  const existing = await db.one(
+    `
+      SELECT e.id
+      FROM exceptions e
+      INNER JOIN invoices i
+        ON i.id = e.invoice_id
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE e.invoice_id = $1
+        AND e.exception_type = $2
+        AND e.status = 'Open'
+        AND d.organisation_id = $3
+    `,
+    [
+      invoiceId,
+      exceptionType,
+      organisationId,
+    ]
   );
 
   if (existing) {
@@ -191,29 +227,34 @@ function createException(
 
   const id = randomUUID();
 
-  db.prepare(`
-    INSERT INTO exceptions (
+  await db.execute(
+    `
+      INSERT INTO exceptions (
+        id,
+        invoice_id,
+        exception_type,
+        severity,
+        description,
+        status,
+        created_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5,
+        'Open', $6
+      )
+    `,
+    [
       id,
-      invoice_id,
-      exception_type,
+      invoiceId,
+      exceptionType,
       severity,
       description,
-      status,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, ?, 'Open', ?)
-  `).run(
-    id,
-    invoiceId,
-    exceptionType,
-    severity,
-    description,
-    new Date().toISOString()
+      new Date().toISOString(),
+    ]
   );
 
-  createAudit(
+  await createAudit(
     organisationId,
-
     "EXCEPTION_CREATED",
     "exception",
     id,
@@ -223,37 +264,59 @@ function createException(
   return id;
 }
 
-function resolveSystemExceptions(
+async function resolveSystemExceptions(
   invoiceId,
   organisationId
 ) {
-  const now = new Date().toISOString();
+  const now =
+    new Date().toISOString();
 
-  const open = db.prepare(`
-    SELECT id
-    FROM exceptions
-    WHERE invoice_id = ?
-      AND status = 'Open'
-  `).all(invoiceId);
+  const open = await db.many(
+    `
+      SELECT e.id
+      FROM exceptions e
+      INNER JOIN invoices i
+        ON i.id = e.invoice_id
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE e.invoice_id = $1
+        AND e.status = 'Open'
+        AND d.organisation_id = $2
+    `,
+    [
+      invoiceId,
+      organisationId,
+    ]
+  );
 
-  db.prepare(`
-    UPDATE exceptions
-    SET
-      status = 'Resolved',
-      resolution = ?,
-      resolved_at = ?
-    WHERE invoice_id = ?
-      AND status = 'Open'
-  `).run(
-    "Resolved automatically after successful re-match.",
-    now,
-    invoiceId
+  await db.execute(
+    `
+      UPDATE exceptions
+      SET
+        status = 'Resolved',
+        resolution = $1,
+        resolved_at = $2
+      WHERE invoice_id = $3
+        AND status = 'Open'
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE d.organisation_id = $4
+        )
+    `,
+    [
+      "Resolved automatically after successful re-match.",
+      now,
+      invoiceId,
+      organisationId,
+    ]
   );
 
   for (const item of open) {
-    createAudit(
+    await createAudit(
       organisationId,
-
       "EXCEPTION_AUTO_RESOLVED",
       "exception",
       item.id,
@@ -262,15 +325,31 @@ function resolveSystemExceptions(
   }
 }
 
-function removeAutomaticApprovals(invoiceId) {
-  db.prepare(`
-    DELETE FROM approvals
-    WHERE invoice_id = ?
-      AND approval_type = 'Automatic'
-  `).run(invoiceId);
+async function removeAutomaticApprovals(
+  invoiceId,
+  organisationId
+) {
+  await db.execute(
+    `
+      DELETE FROM approvals
+      WHERE invoice_id = $1
+        AND approval_type = 'Automatic'
+        AND invoice_id IN (
+          SELECT i.id
+          FROM invoices i
+          INNER JOIN documents d
+            ON d.id = i.document_id
+          WHERE d.organisation_id = $2
+        )
+    `,
+    [
+      invoiceId,
+      organisationId,
+    ]
+  );
 }
 
-function duplicateExists(
+async function duplicateExists(
   invoice,
   organisationId
 ) {
@@ -279,7 +358,7 @@ function duplicateExists(
   }
 
   if (
-    getSetting(
+    await getSetting(
       "duplicate_detection",
       "true",
       organisationId
@@ -288,29 +367,32 @@ function duplicateExists(
     return false;
   }
 
-  const duplicate = db.prepare(`
-    SELECT i.id
-    FROM invoices i
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE i.id <> ?
-      AND i.invoice_number = ?
-      AND i.supplier_name = ?
-      AND i.total_amount = ?
-      AND d.organisation_id = ?
-    LIMIT 1
-  `).get(
-    invoice.id,
-    invoice.invoice_number,
-    invoice.supplier_name,
-    invoice.total_amount,
-    organisationId
+  const duplicate = await db.one(
+    `
+      SELECT i.id
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE i.id <> $1
+        AND i.invoice_number = $2
+        AND i.supplier_name = $3
+        AND i.total_amount = $4
+        AND d.organisation_id = $5
+      LIMIT 1
+    `,
+    [
+      invoice.id,
+      invoice.invoice_number,
+      invoice.supplier_name,
+      invoice.total_amount,
+      organisationId,
+    ]
   );
 
   return Boolean(duplicate);
 }
 
-function upsertMatch({
+async function upsertMatch({
   invoice,
   po,
   checks,
@@ -319,100 +401,112 @@ function upsertMatch({
   variance,
   details,
 }) {
-  const now = new Date().toISOString();
+  const now =
+    new Date().toISOString();
 
-  const existing = db.prepare(`
-    SELECT id
-    FROM invoice_matches
-    WHERE invoice_id = ?
-  `).get(invoice.id);
+  const existing = await db.one(
+    `
+      SELECT id
+      FROM invoice_matches
+      WHERE invoice_id = $1
+    `,
+    [invoice.id]
+  );
 
   const id =
     existing?.id ||
     randomUUID();
 
   if (existing) {
-    db.prepare(`
-      UPDATE invoice_matches
-      SET
-        purchase_order_id = ?,
-        supplier_match = ?,
-        po_reference_match = ?,
-        currency_match = ?,
-        subtotal_match = ?,
-        tax_match = ?,
-        total_match = ?,
-        line_items_match = ?,
-        match_score = ?,
-        match_status = ?,
-        variance_amount = ?,
-        details = ?,
-        updated_at = ?
-      WHERE id = ?
-    `).run(
-      po?.id || null,
-      Number(checks.supplierMatch),
-      Number(checks.poReferenceMatch),
-      Number(checks.currencyMatch),
-      Number(checks.subtotalMatch),
-      Number(checks.taxMatch),
-      Number(checks.totalMatch),
-      Number(checks.lineItemsMatch),
-      score,
-      status,
-      variance,
-      details,
-      now,
-      id
+    await db.execute(
+      `
+        UPDATE invoice_matches
+        SET
+          purchase_order_id = $1,
+          supplier_match = $2,
+          po_reference_match = $3,
+          currency_match = $4,
+          subtotal_match = $5,
+          tax_match = $6,
+          total_match = $7,
+          line_items_match = $8,
+          match_score = $9,
+          match_status = $10,
+          variance_amount = $11,
+          details = $12,
+          updated_at = $13
+        WHERE id = $14
+      `,
+      [
+        po?.id || null,
+        Number(checks.supplierMatch),
+        Number(checks.poReferenceMatch),
+        Number(checks.currencyMatch),
+        Number(checks.subtotalMatch),
+        Number(checks.taxMatch),
+        Number(checks.totalMatch),
+        Number(checks.lineItemsMatch),
+        score,
+        status,
+        variance,
+        details,
+        now,
+        id,
+      ]
     );
   } else {
-    db.prepare(`
-      INSERT INTO invoice_matches (
+    await db.execute(
+      `
+        INSERT INTO invoice_matches (
+          id,
+          invoice_id,
+          purchase_order_id,
+          supplier_match,
+          po_reference_match,
+          currency_match,
+          subtotal_match,
+          tax_match,
+          total_match,
+          line_items_match,
+          match_score,
+          match_status,
+          variance_amount,
+          details,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7, $8,
+          $9, $10, $11, $12,
+          $13, $14, $15, $16
+        )
+      `,
+      [
         id,
-        invoice_id,
-        purchase_order_id,
-        supplier_match,
-        po_reference_match,
-        currency_match,
-        subtotal_match,
-        tax_match,
-        total_match,
-        line_items_match,
-        match_score,
-        match_status,
-        variance_amount,
+        invoice.id,
+        po?.id || null,
+        Number(checks.supplierMatch),
+        Number(checks.poReferenceMatch),
+        Number(checks.currencyMatch),
+        Number(checks.subtotalMatch),
+        Number(checks.taxMatch),
+        Number(checks.totalMatch),
+        Number(checks.lineItemsMatch),
+        score,
+        status,
+        variance,
         details,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
-      )
-    `).run(
-      id,
-      invoice.id,
-      po?.id || null,
-      Number(checks.supplierMatch),
-      Number(checks.poReferenceMatch),
-      Number(checks.currencyMatch),
-      Number(checks.subtotalMatch),
-      Number(checks.taxMatch),
-      Number(checks.totalMatch),
-      Number(checks.lineItemsMatch),
-      score,
-      status,
-      variance,
-      details,
-      now,
-      now
+        now,
+        now,
+      ]
     );
   }
 
   return id;
 }
 
-function getMatch(
+async function getMatch(
   invoiceId,
   organisationId
 ) {
@@ -420,37 +514,36 @@ function getMatch(
     return null;
   }
 
-  const match = db.prepare(`
-    SELECT
-      im.id,
-      im.invoice_id AS invoiceId,
-      im.purchase_order_id AS purchaseOrderId,
-      im.match_score AS matchScore,
-      im.match_status AS matchStatus,
-      im.variance_amount AS varianceAmount,
-      im.details,
-      im.created_at AS createdAt,
-      im.updated_at AS updatedAt
-    FROM invoice_matches im
-
-    INNER JOIN invoices i
-      ON i.id = im.invoice_id
-
-    INNER JOIN documents d
-      ON d.id = i.document_id
-
-    WHERE
-      im.invoice_id = ?
-      AND d.organisation_id = ?
-  `).get(
-    invoiceId,
-    organisationId
+  const match = await db.one(
+    `
+      SELECT
+        im.id,
+        im.invoice_id AS "invoiceId",
+        im.purchase_order_id AS "purchaseOrderId",
+        im.match_score AS "matchScore",
+        im.match_status AS "matchStatus",
+        im.variance_amount AS "varianceAmount",
+        im.details,
+        im.created_at AS "createdAt",
+        im.updated_at AS "updatedAt"
+      FROM invoice_matches im
+      INNER JOIN invoices i
+        ON i.id = im.invoice_id
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE im.invoice_id = $1
+        AND d.organisation_id = $2
+    `,
+    [
+      invoiceId,
+      organisationId,
+    ]
   );
 
   return match || null;
 }
 
-function saveExceptionMatch(
+async function saveExceptionMatch(
   invoice,
   po,
   details,
@@ -466,28 +559,27 @@ function saveExceptionMatch(
     lineItemsMatch: false,
   };
 
-  const matchId = upsertMatch({
-    invoice,
-    po,
-    checks,
-    score: 0,
-    status: "Exception",
-    variance: 0,
-    details,
-  });
+  const matchId =
+    await upsertMatch({
+      invoice,
+      po,
+      checks,
+      score: 0,
+      status: "Exception",
+      variance: 0,
+      details,
+    });
 
-  createAudit(
+  await createAudit(
     organisationId,
-
     "INVOICE_MATCH_EXCEPTION",
     "invoice",
     invoice.id,
     details
   );
 
-  createAudit(
+  await createAudit(
     organisationId,
-
     "PO_MATCH_COMPLETED",
     "invoice_match",
     matchId,
@@ -500,7 +592,7 @@ function saveExceptionMatch(
   );
 }
 
-function matchInvoice(
+async function matchInvoice(
   invoiceId,
   organisationId
 ) {
@@ -509,19 +601,32 @@ function matchInvoice(
       "Organisation context is required."
     );
   }
-  const invoice = getInvoice(invoiceId, organisationId);
+
+  const invoice =
+    await getInvoice(
+      invoiceId,
+      organisationId
+    );
 
   if (!invoice) {
-    throw new Error("Invoice not found.");
+    throw new Error(
+      "Invoice not found."
+    );
   }
 
-  removeAutomaticApprovals(invoice.id);
+  await removeAutomaticApprovals(
+    invoice.id,
+    organisationId
+  );
 
   const duplicate =
-    duplicateExists(invoice, organisationId);
+    await duplicateExists(
+      invoice,
+      organisationId
+    );
 
   if (duplicate) {
-    createException(
+    await createException(
       invoice.id,
       "DUPLICATE_INVOICE",
       "High",
@@ -530,8 +635,10 @@ function matchInvoice(
     );
   }
 
-  if (!invoice.purchase_order_number) {
-    createException(
+  if (
+    !invoice.purchase_order_number
+  ) {
+    await createException(
       invoice.id,
       "MISSING_PO_REFERENCE",
       "High",
@@ -547,13 +654,14 @@ function matchInvoice(
     );
   }
 
-  const po = getPurchaseOrder(
-    invoice.purchase_order_number,
-    organisationId
-  );
+  const po =
+    await getPurchaseOrder(
+      invoice.purchase_order_number,
+      organisationId
+    );
 
   if (!po) {
-    createException(
+    await createException(
       invoice.id,
       "PURCHASE_ORDER_NOT_FOUND",
       "High",
@@ -570,22 +678,31 @@ function matchInvoice(
   }
 
   const tolerance = Number(
-    getSetting("amount_tolerance",
+    await getSetting(
+      "amount_tolerance",
       "1.00",
       organisationId
     )
   );
 
   const invoiceItems =
-    getInvoiceItems(invoice.id);
+    await getInvoiceItems(
+      invoice.id
+    );
 
   const poItems =
-    getPurchaseOrderItems(po.id);
+    await getPurchaseOrderItems(
+      po.id
+    );
 
   const checks = {
     supplierMatch:
-      normalize(invoice.supplier_name) ===
-      normalize(po.supplier_name),
+      normalize(
+        invoice.supplier_name
+      ) ===
+      normalize(
+        po.supplier_name
+      ),
 
     poReferenceMatch:
       normalize(
@@ -594,7 +711,9 @@ function matchInvoice(
       normalize(po.po_number),
 
     currencyMatch:
-      normalize(invoice.currency) ===
+      normalize(
+        invoice.currency
+      ) ===
       normalize(po.currency),
 
     subtotalMatch:
@@ -657,7 +776,7 @@ function matchInvoice(
       "Supplier mismatch"
     );
 
-    createException(
+    await createException(
       invoice.id,
       "SUPPLIER_MISMATCH",
       "High",
@@ -677,7 +796,7 @@ function matchInvoice(
       "Currency mismatch"
     );
 
-    createException(
+    await createException(
       invoice.id,
       "CURRENCY_MISMATCH",
       "High",
@@ -703,7 +822,7 @@ function matchInvoice(
       "Total mismatch"
     );
 
-    createException(
+    await createException(
       invoice.id,
       "AMOUNT_MISMATCH",
       "High",
@@ -717,7 +836,7 @@ function matchInvoice(
       "Line item mismatch"
     );
 
-    createException(
+    await createException(
       invoice.id,
       "LINE_ITEM_MISMATCH",
       "Medium",
@@ -733,7 +852,8 @@ function matchInvoice(
   }
 
   const threshold = Number(
-    getSetting("auto_approval_match_score",
+    await getSetting(
+      "auto_approval_match_score",
       "100",
       organisationId
     )
@@ -753,18 +873,19 @@ function matchInvoice(
       ? "Invoice successfully matched to purchase order."
       : failures.join("; ");
 
-  const matchId = upsertMatch({
-    invoice,
-    po,
-    checks,
-    score,
-    status,
-    variance,
-    details,
-  });
+  const matchId =
+    await upsertMatch({
+      invoice,
+      po,
+      checks,
+      score,
+      status,
+      variance,
+      details,
+    });
 
   if (matched) {
-    resolveSystemExceptions(
+    await resolveSystemExceptions(
       invoice.id,
       organisationId
     );
@@ -772,50 +893,59 @@ function matchInvoice(
     const approvalId =
       randomUUID();
 
-    db.prepare(`
-      INSERT INTO approvals (
-        id,
-        invoice_id,
-        decision,
-        approval_type,
-        approver,
-        comments,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      approvalId,
-      invoice.id,
-      "Approved",
-      "Automatic",
-      "APPA Matching Engine",
-      `Automatically approved after ${score}% PO match.`,
-      new Date().toISOString()
+    await db.execute(
+      `
+        INSERT INTO approvals (
+          id,
+          invoice_id,
+          decision,
+          approval_type,
+          approver,
+          comments,
+          created_at
+        )
+        VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7
+        )
+      `,
+      [
+        approvalId,
+        invoice.id,
+        "Approved",
+        "Automatic",
+        "APPA Matching Engine",
+        `Automatically approved after ${score}% PO match.`,
+        new Date().toISOString(),
+      ]
     );
 
-    db.prepare(`
-      UPDATE purchase_orders
-      SET
-        status = 'Matched',
-        updated_at = ?
-      WHERE id = ?
-    `).run(
-      new Date().toISOString(),
-      po.id
+    await db.execute(
+      `
+        UPDATE purchase_orders
+        SET
+          status = 'Matched',
+          updated_at = $1
+        WHERE id = $2
+          AND organisation_id = $3
+      `,
+      [
+        new Date().toISOString(),
+        po.id,
+        organisationId,
+      ]
     );
 
-    createAudit(
+    await createAudit(
       organisationId,
-
       "INVOICE_AUTO_APPROVED",
       "invoice",
       invoice.id,
       `${invoice.invoice_number} automatically approved after ${score}% PO match`
     );
   } else {
-    createAudit(
+    await createAudit(
       organisationId,
-
       "INVOICE_MATCH_EXCEPTION",
       "invoice",
       invoice.id,
@@ -823,9 +953,8 @@ function matchInvoice(
     );
   }
 
-  createAudit(
+  await createAudit(
     organisationId,
-
     "PO_MATCH_COMPLETED",
     "invoice_match",
     matchId,

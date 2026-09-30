@@ -2,10 +2,6 @@ const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const {
-  listUserOrganisations,
-} = require("./organisationContext");
-
 const db = require("./database");
 const {
   requireAuth,
@@ -29,24 +25,87 @@ function publicUser(row) {
   };
 }
 
-function audit(action, userId, description) {
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
-      action,
-      entity_type,
-      entity_id,
-      description,
-      created_at
-    )
-    VALUES (?, ?, 'Authentication', ?, ?, ?)
-  `).run(
-    crypto.randomUUID(),
-    action,
-    userId || null,
-    description,
-    new Date().toISOString()
-  );
+async function audit(
+  action,
+  userId,
+  description
+) {
+  try {
+    let organisationId = null;
+
+    if (userId) {
+      const membership = await db.one(
+        `
+          SELECT organisation_id
+          FROM organisation_memberships
+          WHERE user_id = $1
+            AND status = 'Active'
+          ORDER BY created_at ASC
+          LIMIT 1
+        `,
+        [userId]
+      );
+
+      organisationId =
+        membership?.organisation_id || null;
+    }
+
+    if (!organisationId) {
+      const organisation = await db.one(`
+        SELECT id
+        FROM organisations
+        WHERE status = 'Active'
+        ORDER BY created_at ASC
+        LIMIT 1
+      `);
+
+      organisationId =
+        organisation?.id || null;
+    }
+
+    if (!organisationId) {
+      console.warn(
+        "Authentication audit skipped: no active organisation."
+      );
+      return;
+    }
+
+    await db.execute(
+      `
+        INSERT INTO audit_logs (
+          id,
+          action,
+          entity_type,
+          entity_id,
+          description,
+          created_at,
+          organisation_id
+        )
+        VALUES (
+          $1,
+          $2,
+          'Authentication',
+          $3,
+          $4,
+          $5,
+          $6
+        )
+      `,
+      [
+        crypto.randomUUID(),
+        action,
+        userId || null,
+        description,
+        new Date().toISOString(),
+        organisationId,
+      ]
+    );
+  } catch (error) {
+    console.warn(
+      "Authentication audit could not be recorded:",
+      error.message
+    );
+  }
 }
 
 router.post("/login", async (req, res) => {
@@ -63,15 +122,18 @@ router.post("/login", async (req, res) => {
     });
   }
 
-  const user = db.prepare(`
-    SELECT *
-    FROM users
-    WHERE email = ?
-    LIMIT 1
-  `).get(email);
+  const user = await db.one(
+    `
+      SELECT *
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+    `,
+    [email]
+  );
 
   if (!user) {
-    audit(
+    await audit(
       "AUTH_LOGIN_FAILED",
       null,
       `Failed sign-in attempt for ${email}.`
@@ -84,7 +146,7 @@ router.post("/login", async (req, res) => {
   }
 
   if (user.status !== "Active") {
-    audit(
+    await audit(
       "AUTH_LOGIN_BLOCKED",
       user.id,
       `Sign-in blocked for inactive account ${user.email}.`
@@ -102,7 +164,7 @@ router.post("/login", async (req, res) => {
   );
 
   if (!valid) {
-    audit(
+    await audit(
       "AUTH_LOGIN_FAILED",
       user.id,
       `Failed sign-in attempt for ${user.email}.`
@@ -116,12 +178,15 @@ router.post("/login", async (req, res) => {
 
   const now = new Date().toISOString();
 
-  db.prepare(`
-    UPDATE users
-    SET last_login_at = ?,
-        updated_at = ?
-    WHERE id = ?
-  `).run(now, now, user.id);
+  await db.execute(
+    `
+      UPDATE users
+      SET last_login_at = $1,
+          updated_at = $2
+      WHERE id = $3
+    `,
+    [now, now, user.id]
+  );
 
   const token = jwt.sign(
     {
@@ -139,7 +204,7 @@ router.post("/login", async (req, res) => {
     }
   );
 
-  audit(
+  await audit(
     "AUTH_LOGIN_SUCCESS",
     user.id,
     `${user.full_name} signed in successfully.`
@@ -187,15 +252,18 @@ router.post("/forgot-password", async (req, res) => {
   const genericMessage =
     "If an active account exists for that email, password recovery instructions have been created.";
 
-  const user = db.prepare(`
-    SELECT *
-    FROM users
-    WHERE email = ?
-    LIMIT 1
-  `).get(email);
+  const user = await db.one(
+    `
+      SELECT *
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+    `,
+    [email]
+  );
 
   if (!user || user.status !== "Active") {
-    audit(
+    await audit(
       "AUTH_PASSWORD_RESET_REQUEST",
       user?.id || null,
       "Password recovery requested."
@@ -215,32 +283,38 @@ router.post("/forgot-password", async (req, res) => {
     now.getTime() + 15 * 60 * 1000
   ).toISOString();
 
-  db.prepare(`
-    UPDATE password_reset_tokens
-    SET used_at = ?
-    WHERE user_id = ?
-      AND used_at IS NULL
-  `).run(now.toISOString(), user.id);
-
-  db.prepare(`
-    INSERT INTO password_reset_tokens (
-      id,
-      user_id,
-      token_hash,
-      expires_at,
-      used_at,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, NULL, ?)
-  `).run(
-    crypto.randomUUID(),
-    user.id,
-    tokenHash,
-    expiresAt,
-    now.toISOString()
+  await db.execute(
+    `
+      UPDATE password_reset_tokens
+      SET used_at = $1
+      WHERE user_id = $2
+        AND used_at IS NULL
+    `,
+    [now.toISOString(), user.id]
   );
 
-  audit(
+  await db.execute(
+    `
+      INSERT INTO password_reset_tokens (
+        id,
+        user_id,
+        token_hash,
+        expires_at,
+        used_at,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, NULL, $5)
+    `,
+    [
+      crypto.randomUUID(),
+      user.id,
+      tokenHash,
+      expiresAt,
+      now.toISOString(),
+    ]
+  );
+
+  await audit(
     "AUTH_PASSWORD_RESET_REQUEST",
     user.id,
     `${user.full_name} requested password recovery.`
@@ -286,18 +360,21 @@ router.post("/reset-password", async (req, res) => {
 
   const tokenHash = hashResetToken(token);
 
-  const reset = db.prepare(`
-    SELECT
-      prt.*,
-      u.email,
-      u.full_name,
-      u.status
-    FROM password_reset_tokens prt
-    JOIN users u
-      ON u.id = prt.user_id
-    WHERE prt.token_hash = ?
-    LIMIT 1
-  `).get(tokenHash);
+  const reset = await db.one(
+    `
+      SELECT
+        prt.*,
+        u.email,
+        u.full_name,
+        u.status
+      FROM password_reset_tokens prt
+      JOIN users u
+        ON u.id = prt.user_id
+      WHERE prt.token_hash = $1
+      LIMIT 1
+    `,
+    [tokenHash]
+  );
 
   if (
     !reset ||
@@ -314,29 +391,33 @@ router.post("/reset-password", async (req, res) => {
   const passwordHash = await bcrypt.hash(password, 12);
   const now = new Date().toISOString();
 
-  const updatePassword = db.transaction(() => {
-    db.prepare(`
-      UPDATE users
-      SET password_hash = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(
-      passwordHash,
-      now,
-      reset.user_id
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      `
+        UPDATE users
+        SET password_hash = $1,
+            updated_at = $2
+        WHERE id = $3
+      `,
+      [
+        passwordHash,
+        now,
+        reset.user_id,
+      ]
     );
 
-    db.prepare(`
-      UPDATE password_reset_tokens
-      SET used_at = ?
-      WHERE user_id = ?
-        AND used_at IS NULL
-    `).run(now, reset.user_id);
+    await tx.execute(
+      `
+        UPDATE password_reset_tokens
+        SET used_at = $1
+        WHERE user_id = $2
+          AND used_at IS NULL
+      `,
+      [now, reset.user_id]
+    );
   });
 
-  updatePassword();
-
-  audit(
+  await audit(
     "AUTH_PASSWORD_RESET_SUCCESS",
     reset.user_id,
     `${reset.full_name} reset their password successfully.`
@@ -383,12 +464,15 @@ router.post(
       });
     }
 
-    const user = db.prepare(`
-      SELECT *
-      FROM users
-      WHERE id = ?
-      LIMIT 1
-    `).get(req.user.id);
+      const user = await db.one(
+      `
+        SELECT *
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [req.user.id]
+    );
 
     if (!user || user.status !== "Active") {
       return res.status(401).json({
@@ -404,7 +488,7 @@ router.post(
       );
 
     if (!valid) {
-      audit(
+      await audit(
         "AUTH_PASSWORD_CHANGE_FAILED",
         user.id,
         `${user.full_name} supplied an incorrect current password.`
@@ -421,21 +505,29 @@ router.post(
 
     const now = new Date().toISOString();
 
-    db.prepare(`
-      UPDATE users
-      SET password_hash = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(hash, now, user.id);
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        `
+          UPDATE users
+          SET password_hash = $1,
+              updated_at = $2
+          WHERE id = $3
+        `,
+        [hash, now, user.id]
+      );
 
-    db.prepare(`
-      UPDATE password_reset_tokens
-      SET used_at = ?
-      WHERE user_id = ?
-        AND used_at IS NULL
-    `).run(now, user.id);
+      await tx.execute(
+        `
+          UPDATE password_reset_tokens
+          SET used_at = $1
+          WHERE user_id = $2
+            AND used_at IS NULL
+        `,
+        [now, user.id]
+      );
+    });
 
-    audit(
+    await audit(
       "AUTH_PASSWORD_CHANGE_SUCCESS",
       user.id,
       `${user.full_name} changed their password successfully.`
@@ -451,35 +543,42 @@ router.post(
 router.get(
   "/organisations",
   requireAuth,
-  (req, res) => {
-    const organisations =
-      listActiveOrganisationsForUser(
-        req.user.id
-      );
+  async (req, res, next) => {
+    try {
+      const organisations =
+        await listActiveOrganisationsForUser(
+          req.user.id
+        );
 
-    res.json({
-      success: true,
-      organisations,
-    });
+      return res.json({
+        success: true,
+        organisations,
+      });
+    } catch (error) {
+      return next(error);
+    }
   }
 );
 
-router.get("/me", requireAuth, (req, res) => {
-  const user = db.prepare(`
-    SELECT
-      id,
-      email,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    FROM users
-    WHERE id = ?
-      AND status = 'Active'
-    LIMIT 1
-  `).get(req.user.id);
+router.get("/me", requireAuth, async (req, res, next) => {
+  const user = await db.one(
+    `
+      SELECT
+        id,
+        email,
+        full_name,
+        role,
+        status,
+        last_login_at,
+        created_at,
+        updated_at
+      FROM users
+      WHERE id = $1
+        AND status = 'Active'
+      LIMIT 1
+    `,
+    [req.user.id]
+  );
 
   if (!user) {
     return res.status(401).json({
@@ -489,7 +588,7 @@ router.get("/me", requireAuth, (req, res) => {
   }
 
   const organisations =
-    listActiveOrganisationsForUser(user.id);
+    await listActiveOrganisationsForUser(user.id);
 
   return res.json({
     success: true,
@@ -514,8 +613,8 @@ router.get("/me", requireAuth, (req, res) => {
   });
 });
 
-router.post("/logout", requireAuth, (req, res) => {
-  audit(
+router.post("/logout", requireAuth, async (req, res) => {
+  await audit(
     "AUTH_LOGOUT",
     req.user.id,
     `${req.user.fullName || req.user.email} signed out.`

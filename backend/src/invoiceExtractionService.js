@@ -311,32 +311,36 @@ async function extractText(document) {
   );
 }
 
-function createAudit(
+async function createAudit(
   organisationId,
   action,
   entityType,
   entityId,
-  description
+  description,
+  client = db
 ) {
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
+  await client.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        action,
+        entity_type,
+        entity_id,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+    [
+      randomUUID(),
       action,
-      entity_type,
-      entity_id,
+      entityType,
+      entityId,
       description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    action,
-    entityType,
-    entityId,
-    description,
-    new Date().toISOString(),
-    organisationId
+      new Date().toISOString(),
+      organisationId,
+    ]
   );
 }
 
@@ -350,45 +354,55 @@ async function processInvoiceDocument(
     );
   }
 
-  const document = db.prepare(`
-    SELECT *
-    FROM documents
-    WHERE id = ?
-      AND organisation_id = ?
-  `).get(
-    documentId,
-    organisationId
+  const document = await db.one(
+    `
+      SELECT *
+      FROM documents
+      WHERE id = $1
+        AND organisation_id = $2
+    `,
+    [
+      documentId,
+      organisationId,
+    ]
   );
 
   if (!document) {
-    throw new Error("Document not found.");
+    throw new Error(
+      "Document not found."
+    );
   }
 
   if (
-    String(document.document_type).toLowerCase() !==
-    "invoice"
+    String(
+      document.document_type
+    ).toLowerCase() !== "invoice"
   ) {
     throw new Error(
       "Only documents classified as Invoice can be processed by the invoice extractor."
     );
   }
 
-  db.prepare(`
-    UPDATE documents
-    SET
-      status = ?,
-      extraction_status = ?
-    WHERE id = ?
-      AND organisation_id = ?
-  `).run(
-    "Processing",
-    "Processing",
-    documentId,
-    organisationId
+  await db.execute(
+    `
+      UPDATE documents
+      SET
+        status = $1,
+        extraction_status = $2
+      WHERE id = $3
+        AND organisation_id = $4
+    `,
+    [
+      "Processing",
+      "Processing",
+      documentId,
+      organisationId,
+    ]
   );
 
   try {
-    const rawText = await extractText(document);
+    const rawText =
+      await extractText(document);
 
     if (!normalizeText(rawText)) {
       throw new Error(
@@ -396,180 +410,213 @@ async function processInvoiceDocument(
       );
     }
 
-    const invoice = parseInvoiceText(rawText);
-    const now = new Date().toISOString();
+    const invoice =
+      parseInvoiceText(rawText);
 
-    const existing = db.prepare(`
-      SELECT i.id
-      FROM invoices i
-      INNER JOIN documents d
-        ON d.id = i.document_id
-      WHERE i.document_id = ?
-        AND d.organisation_id = ?
-    `).get(
-      documentId,
-      organisationId
+    const now =
+      new Date().toISOString();
+
+    const existing = await db.one(
+      `
+        SELECT i.id
+        FROM invoices i
+        INNER JOIN documents d
+          ON d.id = i.document_id
+        WHERE i.document_id = $1
+          AND d.organisation_id = $2
+      `,
+      [
+        documentId,
+        organisationId,
+      ]
     );
 
-    const invoiceId = existing?.id || randomUUID();
+    const invoiceId =
+      existing?.id ||
+      randomUUID();
 
-    const transaction = db.transaction(() => {
-      if (existing) {
-        db.prepare(`
-          UPDATE invoices
-          SET
-            invoice_number = ?,
-            invoice_date = ?,
-            due_date = ?,
-            supplier_name = ?,
-            supplier_email = ?,
-            supplier_tax_id = ?,
-            currency = ?,
-            subtotal = ?,
-            tax_amount = ?,
-            total_amount = ?,
-            purchase_order_number = ?,
-            extraction_confidence = ?,
-            validation_status = ?,
-            validation_message = ?,
-            updated_at = ?
-          WHERE id = ?
-            AND document_id IN (
-              SELECT id
-              FROM documents
-              WHERE organisation_id = ?
-            )
-        `).run(
-          invoice.invoiceNumber,
-          invoice.invoiceDate,
-          invoice.dueDate,
-          invoice.supplierName,
-          invoice.supplierEmail,
-          invoice.supplierTaxId,
-          invoice.currency,
-          invoice.subtotal,
-          invoice.taxAmount,
-          invoice.totalAmount,
-          invoice.purchaseOrderNumber,
-          invoice.confidence,
-          invoice.validationStatus,
-          invoice.validationMessage,
-          now,
-          invoiceId,
-          organisationId
-        );
+    await db.transaction(
+      async (tx) => {
+        if (existing) {
+          await tx.execute(
+            `
+              UPDATE invoices
+              SET
+                invoice_number = $1,
+                invoice_date = $2,
+                due_date = $3,
+                supplier_name = $4,
+                supplier_email = $5,
+                supplier_tax_id = $6,
+                currency = $7,
+                subtotal = $8,
+                tax_amount = $9,
+                total_amount = $10,
+                purchase_order_number = $11,
+                extraction_confidence = $12,
+                validation_status = $13,
+                validation_message = $14,
+                updated_at = $15
+              WHERE id = $16
+                AND document_id IN (
+                  SELECT id
+                  FROM documents
+                  WHERE organisation_id = $17
+                )
+            `,
+            [
+              invoice.invoiceNumber,
+              invoice.invoiceDate,
+              invoice.dueDate,
+              invoice.supplierName,
+              invoice.supplierEmail,
+              invoice.supplierTaxId,
+              invoice.currency,
+              invoice.subtotal,
+              invoice.taxAmount,
+              invoice.totalAmount,
+              invoice.purchaseOrderNumber,
+              invoice.confidence,
+              invoice.validationStatus,
+              invoice.validationMessage,
+              now,
+              invoiceId,
+              organisationId,
+            ]
+          );
 
-        db.prepare(`
-          DELETE FROM invoice_line_items
-          WHERE invoice_id = ?
-            AND invoice_id IN (
-              SELECT i.id
-              FROM invoices i
-              INNER JOIN documents d
-                ON d.id = i.document_id
-              WHERE d.organisation_id = ?
-            )
-        `).run(
-          invoiceId,
-          organisationId
-        );
-      } else {
-        db.prepare(`
-          INSERT INTO invoices (
-            id,
-            document_id,
-            invoice_number,
-            invoice_date,
-            due_date,
-            supplier_name,
-            supplier_email,
-            supplier_tax_id,
-            currency,
-            subtotal,
-            tax_amount,
-            total_amount,
-            purchase_order_number,
-            extraction_confidence,
-            validation_status,
-            validation_message,
-            created_at,
-            updated_at
-          )
-          VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?
-          )
-        `).run(
-          invoiceId,
-          documentId,
-          invoice.invoiceNumber,
-          invoice.invoiceDate,
-          invoice.dueDate,
-          invoice.supplierName,
-          invoice.supplierEmail,
-          invoice.supplierTaxId,
-          invoice.currency,
-          invoice.subtotal,
-          invoice.taxAmount,
-          invoice.totalAmount,
-          invoice.purchaseOrderNumber,
-          invoice.confidence,
-          invoice.validationStatus,
-          invoice.validationMessage,
-          now,
-          now
+          await tx.execute(
+            `
+              DELETE FROM invoice_line_items
+              WHERE invoice_id = $1
+                AND invoice_id IN (
+                  SELECT i.id
+                  FROM invoices i
+                  INNER JOIN documents d
+                    ON d.id = i.document_id
+                  WHERE d.organisation_id = $2
+                )
+            `,
+            [
+              invoiceId,
+              organisationId,
+            ]
+          );
+        } else {
+          await tx.execute(
+            `
+              INSERT INTO invoices (
+                id,
+                document_id,
+                invoice_number,
+                invoice_date,
+                due_date,
+                supplier_name,
+                supplier_email,
+                supplier_tax_id,
+                currency,
+                subtotal,
+                tax_amount,
+                total_amount,
+                purchase_order_number,
+                extraction_confidence,
+                validation_status,
+                validation_message,
+                created_at,
+                updated_at
+              )
+              VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10, $11, $12,
+                $13, $14, $15, $16, $17, $18
+              )
+            `,
+            [
+              invoiceId,
+              documentId,
+              invoice.invoiceNumber,
+              invoice.invoiceDate,
+              invoice.dueDate,
+              invoice.supplierName,
+              invoice.supplierEmail,
+              invoice.supplierTaxId,
+              invoice.currency,
+              invoice.subtotal,
+              invoice.taxAmount,
+              invoice.totalAmount,
+              invoice.purchaseOrderNumber,
+              invoice.confidence,
+              invoice.validationStatus,
+              invoice.validationMessage,
+              now,
+              now,
+            ]
+          );
+        }
+
+        for (
+          let index = 0;
+          index < invoice.lineItems.length;
+          index += 1
+        ) {
+          const item =
+            invoice.lineItems[index];
+
+          await tx.execute(
+            `
+              INSERT INTO invoice_line_items (
+                id,
+                invoice_id,
+                description,
+                quantity,
+                unit_price,
+                tax_rate,
+                line_total,
+                position,
+                created_at
+              )
+              VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9
+              )
+            `,
+            [
+              randomUUID(),
+              invoiceId,
+              item.description,
+              item.quantity,
+              item.unitPrice,
+              item.taxRate,
+              item.lineTotal,
+              index + 1,
+              now,
+            ]
+          );
+        }
+
+        await tx.execute(
+          `
+            UPDATE documents
+            SET
+              status = $1,
+              extraction_status = $2
+            WHERE id = $3
+              AND organisation_id = $4
+          `,
+          [
+            invoice.validationStatus ===
+            "Exception"
+              ? "Needs Review"
+              : "Processed",
+            "Completed",
+            documentId,
+            organisationId,
+          ]
         );
       }
+    );
 
-      const insertItem = db.prepare(`
-        INSERT INTO invoice_line_items (
-          id,
-          invoice_id,
-          description,
-          quantity,
-          unit_price,
-          tax_rate,
-          line_total,
-          position,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      invoice.lineItems.forEach((item, index) => {
-        insertItem.run(
-          randomUUID(),
-          invoiceId,
-          item.description,
-          item.quantity,
-          item.unitPrice,
-          item.taxRate,
-          item.lineTotal,
-          index + 1,
-          now
-        );
-      });
-
-      db.prepare(`
-        UPDATE documents
-        SET
-          status = ?,
-          extraction_status = ?
-        WHERE id = ?
-          AND organisation_id = ?
-      `).run(
-        invoice.validationStatus === "Exception"
-          ? "Needs Review"
-          : "Processed",
-        "Completed",
-        documentId,
-        organisationId
-      );
-    });
-
-    transaction();
-
-    createAudit(
+    await createAudit(
       organisationId,
       "INVOICE_EXTRACTED",
       "invoice",
@@ -577,9 +624,10 @@ async function processInvoiceDocument(
       `${document.original_name} extracted with ${invoice.confidence}% confidence`
     );
 
-    createAudit(
+    await createAudit(
       organisationId,
-      invoice.validationStatus === "Validated"
+      invoice.validationStatus ===
+        "Validated"
         ? "INVOICE_VALIDATED"
         : "INVOICE_EXCEPTION",
       "invoice",
@@ -592,33 +640,43 @@ async function processInvoiceDocument(
       organisationId
     );
   } catch (error) {
-    db.prepare(`
-      UPDATE documents
-      SET
-        status = ?,
-        extraction_status = ?
-      WHERE id = ?
-        AND organisation_id = ?
-    `).run(
-      "Needs Review",
-      "Failed",
-      documentId,
-      organisationId
-    );
+    try {
+      await db.execute(
+        `
+          UPDATE documents
+          SET
+            status = $1,
+            extraction_status = $2
+          WHERE id = $3
+            AND organisation_id = $4
+        `,
+        [
+          "Needs Review",
+          "Failed",
+          documentId,
+          organisationId,
+        ]
+      );
 
-    createAudit(
-      organisationId,
-      "INVOICE_EXTRACTION_FAILED",
-      "document",
-      documentId,
-      error.message
-    );
+      await createAudit(
+        organisationId,
+        "INVOICE_EXTRACTION_FAILED",
+        "document",
+        documentId,
+        error.message
+      );
+    } catch (recoveryError) {
+      console.error(
+        "Invoice extraction failure state could not be recorded:",
+        recoveryError.message
+      );
+    }
 
     throw error;
   }
 }
 
-function getInvoiceById(
+async function getInvoiceById(
   invoiceId,
   organisationId
 ) {
@@ -626,76 +684,84 @@ function getInvoiceById(
     return null;
   }
 
-  const invoice = db.prepare(`
-    SELECT
-      i.id,
-      i.document_id AS documentId,
-      d.original_name AS documentName,
+  const invoice = await db.one(
+    `
+      SELECT
+        i.id,
+        i.document_id AS "documentId",
+        d.original_name AS "documentName",
 
-      i.invoice_number AS invoiceNumber,
-      i.invoice_date AS invoiceDate,
-      i.due_date AS dueDate,
+        i.invoice_number AS "invoiceNumber",
+        i.invoice_date AS "invoiceDate",
+        i.due_date AS "dueDate",
 
-      i.supplier_name AS supplierName,
-      i.supplier_email AS supplierEmail,
-      i.supplier_tax_id AS supplierTaxId,
+        i.supplier_name AS "supplierName",
+        i.supplier_email AS "supplierEmail",
+        i.supplier_tax_id AS "supplierTaxId",
 
-      i.currency,
-      i.subtotal,
-      i.tax_amount AS taxAmount,
-      i.total_amount AS totalAmount,
+        i.currency,
+        i.subtotal,
+        i.tax_amount AS "taxAmount",
+        i.total_amount AS "totalAmount",
 
-      i.purchase_order_number AS purchaseOrderNumber,
+        i.purchase_order_number AS "purchaseOrderNumber",
 
-      i.extraction_confidence AS extractionConfidence,
-      i.validation_status AS validationStatus,
-      i.validation_message AS validationMessage,
+        i.extraction_confidence AS "extractionConfidence",
+        i.validation_status AS "validationStatus",
+        i.validation_message AS "validationMessage",
 
-      i.created_at AS createdAt,
-      i.updated_at AS updatedAt,
+        i.created_at AS "createdAt",
+        i.updated_at AS "updatedAt",
 
-      d.status AS documentStatus,
-      d.extraction_status AS extractionStatus
-    FROM invoices i
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE i.id = ?
-      AND d.organisation_id = ?
-  `).get(
-    invoiceId,
-    organisationId
+        d.status AS "documentStatus",
+        d.extraction_status AS "extractionStatus"
+
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE i.id = $1
+        AND d.organisation_id = $2
+    `,
+    [
+      invoiceId,
+      organisationId,
+    ]
   );
 
   if (!invoice) {
     return null;
   }
 
-  invoice.lineItems = db.prepare(`
-    SELECT
-      li.id,
-      li.description,
-      li.quantity,
-      li.unit_price AS unitPrice,
-      li.tax_rate AS taxRate,
-      li.line_total AS lineTotal,
-      li.position
-    FROM invoice_line_items li
-    INNER JOIN invoices i
-      ON i.id = li.invoice_id
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE li.invoice_id = ?
-      AND d.organisation_id = ?
-    ORDER BY li.position ASC
-  `).all(
-    invoiceId,
-    organisationId
-  );
+  invoice.lineItems =
+    await db.many(
+      `
+        SELECT
+          li.id,
+          li.description,
+          li.quantity,
+          li.unit_price AS "unitPrice",
+          li.tax_rate AS "taxRate",
+          li.line_total AS "lineTotal",
+          li.position
+        FROM invoice_line_items li
+        INNER JOIN invoices i
+          ON i.id = li.invoice_id
+        INNER JOIN documents d
+          ON d.id = i.document_id
+        WHERE li.invoice_id = $1
+          AND d.organisation_id = $2
+        ORDER BY li.position ASC
+      `,
+      [
+        invoiceId,
+        organisationId,
+      ]
+    );
 
   return invoice;
 }
 
-function getInvoiceByDocumentId(
+async function getInvoiceByDocumentId(
   documentId,
   organisationId
 ) {
@@ -703,16 +769,19 @@ function getInvoiceByDocumentId(
     return null;
   }
 
-  const row = db.prepare(`
-    SELECT i.id
-    FROM invoices i
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE i.document_id = ?
-      AND d.organisation_id = ?
-  `).get(
-    documentId,
-    organisationId
+  const row = await db.one(
+    `
+      SELECT i.id
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE i.document_id = $1
+        AND d.organisation_id = $2
+    `,
+    [
+      documentId,
+      organisationId,
+    ]
   );
 
   return row
@@ -723,24 +792,31 @@ function getInvoiceByDocumentId(
     : null;
 }
 
-function listInvoices(organisationId) {
+async function listInvoices(
+  organisationId
+) {
   if (!organisationId) {
     return [];
   }
 
-  const rows = db.prepare(`
-    SELECT i.id
-    FROM invoices i
-    INNER JOIN documents d
-      ON d.id = i.document_id
-    WHERE d.organisation_id = ?
-    ORDER BY i.created_at DESC
-  `).all(organisationId);
+  const rows = await db.many(
+    `
+      SELECT i.id
+      FROM invoices i
+      INNER JOIN documents d
+        ON d.id = i.document_id
+      WHERE d.organisation_id = $1
+      ORDER BY i.created_at DESC
+    `,
+    [organisationId]
+  );
 
-  return rows.map((row) =>
-    getInvoiceById(
-      row.id,
-      organisationId
+  return Promise.all(
+    rows.map((row) =>
+      getInvoiceById(
+        row.id,
+        organisationId
+      )
     )
   );
 }
