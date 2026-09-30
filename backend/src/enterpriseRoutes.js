@@ -2005,7 +2005,7 @@ router.post(
 
 router.post(
   "/seed",
-  async (_req, res) => {
+  async (req, res) => {
     const result =
       await seedEnterpriseData(req.organisation.id);
 
