@@ -6702,3 +6702,36 @@ input:-webkit-autofill {
     padding-right: 16px;
   }
 }
+
+/* ============================================================
+   APPA MOBILE QA FIX — RESET DESKTOP SIDEBAR OFFSET
+   ============================================================ */
+
+/*
+ * Desktop .main reserves 250px for the permanent sidebar.
+ * On tablet/mobile the sidebar becomes an off-canvas overlay,
+ * so the desktop horizontal offset must also be removed.
+ */
+@media (max-width: 960px) {
+  .main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .app-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .topbar,
+  .content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+}
