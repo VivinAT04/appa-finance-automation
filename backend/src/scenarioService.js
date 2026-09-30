@@ -16,7 +16,7 @@ function now() {
   return new Date().toISOString();
 }
 
-function requireOrganisationId(
+async function requireOrganisationId(
   organisationId
 ) {
   if (!organisationId) {
@@ -26,18 +26,19 @@ function requireOrganisationId(
   }
 
   const organisation =
-    db.prepare(`
-      SELECT
-        id,
-        name,
-        code,
-        status
-      FROM organisations
-      WHERE
-        id = ?
-        AND status = 'Active'
-    `).get(
-      organisationId
+    await db.one(
+      `
+        SELECT
+          id,
+          name,
+          code,
+          status
+        FROM organisations
+        WHERE
+          id = $1
+          AND status = 'Active'
+      `,
+      [organisationId]
     );
 
   if (!organisation) {
@@ -56,7 +57,7 @@ function requireOrganisationId(
   return organisation;
 }
 
-function audit(
+async function audit(
   organisationId,
   action,
   entityType,
@@ -69,32 +70,37 @@ function audit(
     );
   }
 
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
+  await db.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        action,
+        entity_type,
+        entity_id,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7
+      )
+    `,
+    [
+      randomUUID(),
       action,
-      entity_type,
-      entity_id,
+      entityType,
+      entityId,
       description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    action,
-    entityType,
-    entityId,
-    description,
-    now(),
-    organisationId
+      now(),
+      organisationId,
+    ]
   );
 }
 
-function ensureSupplier(
+async function ensureSupplier(
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
@@ -102,21 +108,23 @@ function ensureSupplier(
     `${SCENARIO_PREFIX}SUPPLIER`;
 
   let supplier =
-    db.prepare(`
-      SELECT *
-      FROM suppliers
-      WHERE
-        supplier_code = ?
-        AND organisation_id = ?
-    `).get(
-      supplierCode,
-      organisationId
+    await db.one(
+      `
+        SELECT *
+        FROM suppliers
+        WHERE
+          supplier_code = $1
+          AND organisation_id = $2
+      `,
+      [
+        supplierCode,
+        organisationId,
+      ]
     );
 
   if (supplier) {
     return supplier;
   }
-
 
   const id =
     randomUUID();
@@ -124,52 +132,62 @@ function ensureSupplier(
   const timestamp =
     now();
 
-  db.prepare(`
-    INSERT INTO suppliers (
+  await db.execute(
+    `
+      INSERT INTO suppliers (
+        id,
+        supplier_code,
+        name,
+        email,
+        tax_id,
+        payment_terms_days,
+        status,
+        created_at,
+        updated_at,
+        organisation_id
+      )
+      VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10
+      )
+    `,
+    [
       id,
-      supplier_code,
-      name,
-      email,
-      tax_id,
-      payment_terms_days,
-      status,
-      created_at,
-      updated_at,
-      organisation_id
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    id,
-    supplierCode,
-    "APPA Scenario Supplies Ltd",
-    "scenario-supplier@example.test",
-    "GST-APPA-SCENARIO",
-    30,
-    "Active",
-    timestamp,
-    timestamp,
-    organisationId
+      supplierCode,
+      "APPA Scenario Supplies Ltd",
+      "scenario-supplier@example.test",
+      "GST-APPA-SCENARIO",
+      30,
+      "Active",
+      timestamp,
+      timestamp,
+      organisationId,
+    ]
   );
 
-  return db.prepare(`
-    SELECT *
-    FROM suppliers
-    WHERE
-      id = ?
-      AND organisation_id = ?
-  `).get(
-    id,
-    organisationId
-  );
+  supplier =
+    await db.one(
+      `
+        SELECT *
+        FROM suppliers
+        WHERE
+          id = $1
+          AND organisation_id = $2
+      `,
+      [
+        id,
+        organisationId,
+      ]
+    );
+
+  return supplier;
 }
 
-function ensurePurchaseOrder(
+async function ensurePurchaseOrder(
   supplier,
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
@@ -187,27 +205,29 @@ function ensurePurchaseOrder(
     `${SCENARIO_PREFIX}PO-1001`;
 
   let purchaseOrder =
-    db.prepare(`
-      SELECT po.*
-      FROM purchase_orders po
+    await db.one(
+      `
+        SELECT po.*
+        FROM purchase_orders po
 
-      INNER JOIN suppliers s
-        ON s.id = po.supplier_id
+        INNER JOIN suppliers s
+          ON s.id = po.supplier_id
 
-      WHERE
-        po.po_number = ?
-        AND po.organisation_id = ?
-        AND s.organisation_id = ?
-    `).get(
-      poNumber,
-      organisationId,
-      organisationId
+        WHERE
+          po.po_number = $1
+          AND po.organisation_id = $2
+          AND s.organisation_id = $3
+      `,
+      [
+        poNumber,
+        organisationId,
+        organisationId,
+      ]
     );
 
   if (purchaseOrder) {
     return purchaseOrder;
   }
-
 
   const poId =
     randomUUID();
@@ -215,114 +235,134 @@ function ensurePurchaseOrder(
   const timestamp =
     now();
 
-  db.prepare(`
-    INSERT INTO purchase_orders (
-      id,
-      po_number,
-      supplier_id,
-      order_date,
-      currency,
-      subtotal,
-      tax_amount,
-      total_amount,
-      status,
-      created_at,
-      updated_at,
-      organisation_id
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    poId,
-    poNumber,
-    supplier.id,
-    "2026-09-29",
-    "INR",
-    23000,
-    4140,
-    27140,
-    "Open",
-    timestamp,
-    timestamp,
-    organisationId
-  );
-
-  const insertLine =
-    db.prepare(`
-      INSERT INTO purchase_order_items (
-        id,
-        purchase_order_id,
-        description,
-        quantity,
-        unit_price,
-        line_total,
-        position,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-  const lines = [
-    {
-      description:
-        "Office Chairs",
-      quantity: 4,
-      unitPrice: 4500,
-      taxRate: 18,
-      lineTotal: 18000,
-    },
-    {
-      description:
-        "Printer Paper",
-      quantity: 10,
-      unitPrice: 300,
-      taxRate: 18,
-      lineTotal: 3000,
-    },
-    {
-      description:
-        "File Storage Boxes",
-      quantity: 5,
-      unitPrice: 400,
-      taxRate: 18,
-      lineTotal: 2000,
-    },
-  ];
-
-  lines.forEach(
-    (line, index) => {
-      insertLine.run(
-        randomUUID(),
-        poId,
-        line.description,
-        line.quantity,
-        line.unitPrice,
-        line.lineTotal,
-        index,
-        timestamp
+  await db.transaction(
+    async (tx) => {
+      await tx.execute(
+        `
+          INSERT INTO purchase_orders (
+            id,
+            po_number,
+            supplier_id,
+            order_date,
+            currency,
+            subtotal,
+            tax_amount,
+            total_amount,
+            status,
+            created_at,
+            updated_at,
+            organisation_id
+          )
+          VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10, $11, $12
+          )
+        `,
+        [
+          poId,
+          poNumber,
+          supplier.id,
+          "2026-09-29",
+          "INR",
+          23000,
+          4140,
+          27140,
+          "Open",
+          timestamp,
+          timestamp,
+          organisationId,
+        ]
       );
+
+      const lines = [
+        {
+          description:
+            "Office Chairs",
+          quantity: 4,
+          unitPrice: 4500,
+          lineTotal: 18000,
+        },
+        {
+          description:
+            "Printer Paper",
+          quantity: 10,
+          unitPrice: 300,
+          lineTotal: 3000,
+        },
+        {
+          description:
+            "File Storage Boxes",
+          quantity: 5,
+          unitPrice: 400,
+          lineTotal: 2000,
+        },
+      ];
+
+      for (
+        let index = 0;
+        index < lines.length;
+        index += 1
+      ) {
+        const line =
+          lines[index];
+
+        await tx.execute(
+          `
+            INSERT INTO purchase_order_items (
+              id,
+              purchase_order_id,
+              description,
+              quantity,
+              unit_price,
+              line_total,
+              position,
+              created_at
+            )
+            VALUES (
+              $1, $2, $3, $4,
+              $5, $6, $7, $8
+            )
+          `,
+          [
+            randomUUID(),
+            poId,
+            line.description,
+            line.quantity,
+            line.unitPrice,
+            line.lineTotal,
+            index,
+            timestamp,
+          ]
+        );
+      }
     }
   );
 
-  return db.prepare(`
-    SELECT *
-    FROM purchase_orders
-    WHERE
-      id = ?
-      AND organisation_id = ?
-  `).get(
-    poId,
-    organisationId
-  );
+  purchaseOrder =
+    await db.one(
+      `
+        SELECT *
+        FROM purchase_orders
+        WHERE
+          id = $1
+          AND organisation_id = $2
+      `,
+      [
+        poId,
+        organisationId,
+      ]
+    );
+
+  return purchaseOrder;
 }
 
-function createDocument({
+async function createDocument({
   organisationId,
   scenario,
   filename,
 }) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
@@ -332,41 +372,46 @@ function createDocument({
   const timestamp =
     now();
 
-  db.prepare(`
-    INSERT INTO documents (
+  await db.execute(
+    `
+      INSERT INTO documents (
+        id,
+        original_name,
+        stored_name,
+        mime_type,
+        size,
+        document_type,
+        status,
+        extraction_status,
+        uploaded_by,
+        created_at,
+        organisation_id
+      )
+      VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11
+      )
+    `,
+    [
       id,
-      original_name,
-      stored_name,
-      mime_type,
-      size,
-      document_type,
-      status,
-      extraction_status,
-      uploaded_by,
-      created_at,
-      organisation_id
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    id,
-    filename,
-    `${SCENARIO_PREFIX}${scenario}.synthetic`,
-    "application/pdf",
-    0,
-    "Invoice",
-    "Processed",
-    "Completed",
-    "Scenario Runner",
-    timestamp,
-    organisationId
+      filename,
+      `${SCENARIO_PREFIX}${scenario}.synthetic`,
+      "application/pdf",
+      0,
+      "Invoice",
+      "Processed",
+      "Completed",
+      "Scenario Runner",
+      timestamp,
+      organisationId,
+    ]
   );
 
   return id;
 }
 
-function createInvoice({
+async function createInvoice({
   organisationId,
   scenario,
   invoiceNumber,
@@ -377,7 +422,7 @@ function createInvoice({
   totalAmount,
   lines,
 }) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
@@ -395,20 +440,22 @@ function createInvoice({
     `${SCENARIO_PREFIX}${scenario}.synthetic`;
 
   const existing =
-    db.prepare(`
-      SELECT i.id
+    await db.one(
+      `
+        SELECT i.id
+        FROM invoices i
 
-      FROM invoices i
+        INNER JOIN documents d
+          ON d.id = i.document_id
 
-      INNER JOIN documents d
-        ON d.id = i.document_id
-
-      WHERE
-        d.stored_name = ?
-        AND d.organisation_id = ?
-    `).get(
-      storedName,
-      organisationId
+        WHERE
+          d.stored_name = $1
+          AND d.organisation_id = $2
+      `,
+      [
+        storedName,
+        organisationId,
+      ]
     );
 
   if (existing) {
@@ -416,7 +463,7 @@ function createInvoice({
   }
 
   const documentId =
-    createDocument({
+    await createDocument({
       organisationId,
       scenario,
       filename:
@@ -431,85 +478,101 @@ function createInvoice({
   const timestamp =
     now();
 
-  db.prepare(`
-    INSERT INTO invoices (
-      id,
-      document_id,
-      invoice_number,
-      invoice_date,
-      due_date,
-      supplier_name,
-      supplier_email,
-      supplier_tax_id,
-      currency,
-      subtotal,
-      tax_amount,
-      total_amount,
-      purchase_order_number,
-      extraction_confidence,
-      validation_status,
-      validation_message,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    invoiceId,
-    documentId,
-    invoiceNumber,
-    "29/09/2026",
-    "29/10/2026",
-    supplier.name,
-    supplier.email,
-    supplier.tax_id,
-    "INR",
-    subtotal,
-    taxAmount,
-    totalAmount,
-    poNumber,
-    100,
-    "Validated",
-    `Synthetic APPA scenario: ${scenario}`,
-    timestamp,
-    timestamp
-  );
-
-  const insertLine =
-    db.prepare(`
-      INSERT INTO invoice_line_items (
-        id,
-        invoice_id,
-        description,
-        quantity,
-        unit_price,
-        tax_rate,
-        line_total,
-        position,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-  lines.forEach(
-    (line, index) => {
-      insertLine.run(
-        randomUUID(),
-        invoiceId,
-        line.description,
-        line.quantity,
-        line.unitPrice,
-        line.taxRate,
-        line.lineTotal,
-        index,
-        timestamp
+  await db.transaction(
+    async (tx) => {
+      await tx.execute(
+        `
+          INSERT INTO invoices (
+            id,
+            document_id,
+            invoice_number,
+            invoice_date,
+            due_date,
+            supplier_name,
+            supplier_email,
+            supplier_tax_id,
+            currency,
+            subtotal,
+            tax_amount,
+            total_amount,
+            purchase_order_number,
+            extraction_confidence,
+            validation_status,
+            validation_message,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, $11, $12,
+            $13, $14, $15, $16, $17, $18
+          )
+        `,
+        [
+          invoiceId,
+          documentId,
+          invoiceNumber,
+          "2026-09-29",
+          "2026-10-29",
+          supplier.name,
+          supplier.email,
+          supplier.tax_id,
+          "INR",
+          subtotal,
+          taxAmount,
+          totalAmount,
+          poNumber,
+          100,
+          "Validated",
+          `Synthetic APPA scenario: ${scenario}`,
+          timestamp,
+          timestamp,
+        ]
       );
+
+      for (
+        let index = 0;
+        index < lines.length;
+        index += 1
+      ) {
+        const line =
+          lines[index];
+
+        await tx.execute(
+          `
+            INSERT INTO invoice_line_items (
+              id,
+              invoice_id,
+              description,
+              quantity,
+              unit_price,
+              tax_rate,
+              line_total,
+              position,
+              created_at
+            )
+            VALUES (
+              $1, $2, $3, $4, $5,
+              $6, $7, $8, $9
+            )
+          `,
+          [
+            randomUUID(),
+            invoiceId,
+            line.description,
+            line.quantity,
+            line.unitPrice,
+            line.taxRate,
+            line.lineTotal,
+            index,
+            timestamp,
+          ]
+        );
+      }
     }
   );
 
-  audit(
+  await audit(
     organisationId,
     "SCENARIO_INVOICE_CREATED",
     "invoice",
@@ -549,26 +612,26 @@ function baseLines() {
   ];
 }
 
-function seedScenarios(
+async function seedScenarios(
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
   const supplier =
-    ensureSupplier(
+    await ensureSupplier(
       organisationId
     );
 
   const purchaseOrder =
-    ensurePurchaseOrder(
+    await ensurePurchaseOrder(
       supplier,
       organisationId
     );
 
   const cleanInvoiceId =
-    createInvoice({
+    await createInvoice({
       organisationId,
       scenario:
         "CLEAN_MATCH",
@@ -593,7 +656,7 @@ function seedScenarios(
   };
 
   const mismatchInvoiceId =
-    createInvoice({
+    await createInvoice({
       organisationId,
       scenario:
         "AMOUNT_MISMATCH",
@@ -609,7 +672,7 @@ function seedScenarios(
     });
 
   const missingPOInvoiceId =
-    createInvoice({
+    await createInvoice({
       organisationId,
       scenario:
         "MISSING_PO",
@@ -624,7 +687,7 @@ function seedScenarios(
     });
 
   const duplicateInvoiceId =
-    createInvoice({
+    await createInvoice({
       organisationId,
       scenario:
         "DUPLICATE_INVOICE",
@@ -639,7 +702,7 @@ function seedScenarios(
       lines: baseLines(),
     });
 
-  audit(
+  await audit(
     organisationId,
     "SCENARIO_DATA_SEEDED",
     "system",
@@ -686,75 +749,78 @@ function seedScenarios(
   };
 }
 
-function getScenarioInvoices(
+async function getScenarioInvoices(
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
-  return db.prepare(`
-    SELECT
-      i.id,
-      i.invoice_number AS invoiceNumber,
-      i.supplier_name AS supplierName,
-      i.currency,
-      i.subtotal,
-      i.tax_amount AS taxAmount,
-      i.total_amount AS totalAmount,
-      i.purchase_order_number AS purchaseOrderNumber,
-      i.validation_status AS validationStatus,
-      i.validation_message AS validationMessage,
-      i.created_at AS createdAt,
+  return db.many(
+    `
+      SELECT
+        i.id,
+        i.invoice_number AS "invoiceNumber",
+        i.supplier_name AS "supplierName",
+        i.currency,
+        i.subtotal,
+        i.tax_amount AS "taxAmount",
+        i.total_amount AS "totalAmount",
+        i.purchase_order_number AS "purchaseOrderNumber",
+        i.validation_status AS "validationStatus",
+        i.validation_message AS "validationMessage",
+        i.created_at AS "createdAt",
 
-      d.stored_name AS storedName,
+        d.stored_name AS "storedName",
 
-      im.match_status AS matchStatus,
-      im.match_score AS matchScore,
+        im.match_status AS "matchStatus",
+        im.match_score AS "matchScore",
 
-      (
-        SELECT COUNT(*)
-        FROM exceptions e
-        WHERE
-          e.invoice_id = i.id
-          AND e.status = 'Open'
-      ) AS openExceptions,
+        (
+          SELECT COUNT(*)::int
+          FROM exceptions e
+          WHERE
+            e.invoice_id = i.id
+            AND e.status = 'Open'
+        ) AS "openExceptions",
 
-      (
-        SELECT a.decision
-        FROM approvals a
-        WHERE
-          a.invoice_id = i.id
-        ORDER BY
-          a.created_at DESC
-        LIMIT 1
-      ) AS latestDecision
+        (
+          SELECT a.decision
+          FROM approvals a
+          WHERE
+            a.invoice_id = i.id
+          ORDER BY
+            a.created_at DESC
+          LIMIT 1
+        ) AS "latestDecision"
 
-    FROM invoices i
+      FROM invoices i
 
-    INNER JOIN documents d
-      ON d.id = i.document_id
+      INNER JOIN documents d
+        ON d.id = i.document_id
 
-    LEFT JOIN invoice_matches im
-      ON im.invoice_id = i.id
+      LEFT JOIN invoice_matches im
+        ON im.invoice_id = i.id
 
-    WHERE
-      d.stored_name LIKE ?
-      AND d.organisation_id = ?
+      WHERE
+        d.stored_name LIKE $1
+        AND d.organisation_id = $2
 
-    ORDER BY
-      i.created_at ASC
-  `).all(
-    `${SCENARIO_PREFIX}%`,
-    organisationId
+      ORDER BY
+        i.created_at ASC
+    `,
+    [
+      `${SCENARIO_PREFIX}%`,
+      organisationId,
+    ]
   );
 }
 
-function getScenarioResults(
+async function getScenarioResults(
   organisationId
 ) {
   const invoices =
-    getScenarioInvoices(
+    await getScenarioInvoices(
       organisationId
     );
 
@@ -831,23 +897,26 @@ function getScenarioResults(
   );
 }
 
-function removeScenarioData(
+async function removeScenarioData(
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
   const docs =
-    db.prepare(`
-      SELECT id
-      FROM documents
-      WHERE
-        stored_name LIKE ?
-        AND organisation_id = ?
-    `).all(
-      `${SCENARIO_PREFIX}%`,
-      organisationId
+    await db.many(
+      `
+        SELECT id
+        FROM documents
+        WHERE
+          stored_name LIKE $1
+          AND organisation_id = $2
+      `,
+      [
+        `${SCENARIO_PREFIX}%`,
+        organisationId,
+      ]
     );
 
   const documentIds =
@@ -857,26 +926,24 @@ function removeScenarioData(
 
   const invoiceRows =
     documentIds.length
-      ? db.prepare(`
-          SELECT i.id
+      ? await db.many(
+          `
+            SELECT i.id
+            FROM invoices i
 
-          FROM invoices i
+            INNER JOIN documents d
+              ON d.id =
+                i.document_id
 
-          INNER JOIN documents d
-            ON d.id =
-               i.document_id
-
-          WHERE
-            i.document_id IN (
-              ${documentIds
-                .map(() => "?")
-                .join(",")}
-            )
-
-            AND d.organisation_id = ?
-        `).all(
-          ...documentIds,
-          organisationId
+            WHERE
+              i.document_id =
+                ANY($1::text[])
+              AND d.organisation_id = $2
+          `,
+          [
+            documentIds,
+            organisationId,
+          ]
         )
       : [];
 
@@ -885,144 +952,147 @@ function removeScenarioData(
       (row) => row.id
     );
 
-  const transaction =
-    db.transaction(() => {
+  await db.transaction(
+    async (tx) => {
       if (
         invoiceIds.length
       ) {
-        const placeholders =
-          invoiceIds
-            .map(() => "?")
-            .join(",");
-
-        db.prepare(`
-          DELETE FROM approvals
-          WHERE
-            invoice_id IN (
-              ${placeholders}
-            )
-            AND invoice_id IN (
-              SELECT i.id
-              FROM invoices i
-              INNER JOIN documents d
-                ON d.id =
-                   i.document_id
-              WHERE
-                d.organisation_id = ?
-            )
-        `).run(
-          ...invoiceIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM approvals
+            WHERE
+              invoice_id =
+                ANY($1::text[])
+              AND invoice_id IN (
+                SELECT i.id
+                FROM invoices i
+                INNER JOIN documents d
+                  ON d.id =
+                    i.document_id
+                WHERE
+                  d.organisation_id = $2
+              )
+          `,
+          [
+            invoiceIds,
+            organisationId,
+          ]
         );
 
-        db.prepare(`
-          DELETE FROM exceptions
-          WHERE
-            invoice_id IN (
-              ${placeholders}
-            )
-            AND invoice_id IN (
-              SELECT i.id
-              FROM invoices i
-              INNER JOIN documents d
-                ON d.id =
-                   i.document_id
-              WHERE
-                d.organisation_id = ?
-            )
-        `).run(
-          ...invoiceIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM exceptions
+            WHERE
+              invoice_id =
+                ANY($1::text[])
+              AND invoice_id IN (
+                SELECT i.id
+                FROM invoices i
+                INNER JOIN documents d
+                  ON d.id =
+                    i.document_id
+                WHERE
+                  d.organisation_id = $2
+              )
+          `,
+          [
+            invoiceIds,
+            organisationId,
+          ]
         );
 
-        db.prepare(`
-          DELETE FROM invoice_matches
-          WHERE
-            invoice_id IN (
-              ${placeholders}
-            )
-            AND invoice_id IN (
-              SELECT i.id
-              FROM invoices i
-              INNER JOIN documents d
-                ON d.id =
-                   i.document_id
-              WHERE
-                d.organisation_id = ?
-            )
-        `).run(
-          ...invoiceIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM invoice_matches
+            WHERE
+              invoice_id =
+                ANY($1::text[])
+              AND invoice_id IN (
+                SELECT i.id
+                FROM invoices i
+                INNER JOIN documents d
+                  ON d.id =
+                    i.document_id
+                WHERE
+                  d.organisation_id = $2
+              )
+          `,
+          [
+            invoiceIds,
+            organisationId,
+          ]
         );
 
-        db.prepare(`
-          DELETE FROM invoice_line_items
-          WHERE
-            invoice_id IN (
-              ${placeholders}
-            )
-            AND invoice_id IN (
-              SELECT i.id
-              FROM invoices i
-              INNER JOIN documents d
-                ON d.id =
-                   i.document_id
-              WHERE
-                d.organisation_id = ?
-            )
-        `).run(
-          ...invoiceIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM invoice_line_items
+            WHERE
+              invoice_id =
+                ANY($1::text[])
+              AND invoice_id IN (
+                SELECT i.id
+                FROM invoices i
+                INNER JOIN documents d
+                  ON d.id =
+                    i.document_id
+                WHERE
+                  d.organisation_id = $2
+              )
+          `,
+          [
+            invoiceIds,
+            organisationId,
+          ]
         );
 
-        db.prepare(`
-          DELETE FROM invoices
-          WHERE
-            id IN (
-              ${placeholders}
-            )
-            AND document_id IN (
-              SELECT id
-              FROM documents
-              WHERE organisation_id = ?
-            )
-        `).run(
-          ...invoiceIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM invoices
+            WHERE
+              id = ANY($1::text[])
+              AND document_id IN (
+                SELECT id
+                FROM documents
+                WHERE organisation_id = $2
+              )
+          `,
+          [
+            invoiceIds,
+            organisationId,
+          ]
         );
       }
 
       if (
         documentIds.length
       ) {
-        const placeholders =
-          documentIds
-            .map(() => "?")
-            .join(",");
-
-        db.prepare(`
-          DELETE FROM documents
-          WHERE
-            id IN (
-              ${placeholders}
-            )
-            AND organisation_id = ?
-        `).run(
-          ...documentIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM documents
+            WHERE
+              id = ANY($1::text[])
+              AND organisation_id = $2
+          `,
+          [
+            documentIds,
+            organisationId,
+          ]
         );
       }
 
       const poRows =
-        db.prepare(`
-          SELECT id
-          FROM purchase_orders
-          WHERE
-            po_number LIKE ?
-            AND organisation_id = ?
-        `).all(
-          `${SCENARIO_PREFIX}%`,
-          organisationId
+        await tx.many(
+          `
+            SELECT id
+            FROM purchase_orders
+            WHERE
+              po_number LIKE $1
+              AND organisation_id = $2
+          `,
+          [
+            `${SCENARIO_PREFIX}%`,
+            organisationId,
+          ]
         );
 
       const poIds =
@@ -1033,61 +1103,64 @@ function removeScenarioData(
       if (
         poIds.length
       ) {
-        const placeholders =
-          poIds
-            .map(() => "?")
-            .join(",");
-
-        db.prepare(`
-          DELETE FROM purchase_order_items
-          WHERE
-            purchase_order_id IN (
-              ${placeholders}
-            )
-            AND purchase_order_id IN (
-              SELECT id
-              FROM purchase_orders
-              WHERE organisation_id = ?
-            )
-        `).run(
-          ...poIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM purchase_order_items
+            WHERE
+              purchase_order_id =
+                ANY($1::text[])
+              AND purchase_order_id IN (
+                SELECT id
+                FROM purchase_orders
+                WHERE organisation_id = $2
+              )
+          `,
+          [
+            poIds,
+            organisationId,
+          ]
         );
 
-        db.prepare(`
-          DELETE FROM purchase_orders
-          WHERE
-            id IN (
-              ${placeholders}
-            )
-            AND organisation_id = ?
-        `).run(
-          ...poIds,
-          organisationId
+        await tx.execute(
+          `
+            DELETE FROM purchase_orders
+            WHERE
+              id = ANY($1::text[])
+              AND organisation_id = $2
+          `,
+          [
+            poIds,
+            organisationId,
+          ]
         );
       }
 
-      db.prepare(`
-        DELETE FROM suppliers
-        WHERE
-          supplier_code LIKE ?
-          AND organisation_id = ?
-      `).run(
-        `${SCENARIO_PREFIX}%`,
-        organisationId
+      await tx.execute(
+        `
+          DELETE FROM suppliers
+          WHERE
+            supplier_code LIKE $1
+            AND organisation_id = $2
+        `,
+        [
+          `${SCENARIO_PREFIX}%`,
+          organisationId,
+        ]
       );
 
-      db.prepare(`
-        DELETE FROM audit_logs
-        WHERE
-          action LIKE 'SCENARIO_%'
-          AND organisation_id = ?
-      `).run(
-        organisationId
+      await tx.execute(
+        `
+          DELETE FROM audit_logs
+          WHERE
+            action LIKE 'SCENARIO\\_%'
+            AND organisation_id = $1
+        `,
+        [
+          organisationId,
+        ]
       );
-    });
-
-  transaction();
+    }
+  );
 
   return {
     documentsRemoved:
@@ -1098,10 +1171,99 @@ function removeScenarioData(
   };
 }
 
+async function removeSingleInvoice(
+  invoiceId,
+  organisationId
+) {
+  const invoice =
+    await db.one(
+      `
+        SELECT
+          i.id,
+          i.document_id AS "documentId"
+
+        FROM invoices i
+
+        INNER JOIN documents d
+          ON d.id =
+            i.document_id
+
+        WHERE
+          i.id = $1
+          AND d.organisation_id = $2
+      `,
+      [
+        invoiceId,
+        organisationId,
+      ]
+    );
+
+  if (!invoice) {
+    return;
+  }
+
+  await db.transaction(
+    async (tx) => {
+      await tx.execute(
+        `
+          DELETE FROM approvals
+          WHERE invoice_id = $1
+        `,
+        [invoiceId]
+      );
+
+      await tx.execute(
+        `
+          DELETE FROM exceptions
+          WHERE invoice_id = $1
+        `,
+        [invoiceId]
+      );
+
+      await tx.execute(
+        `
+          DELETE FROM invoice_matches
+          WHERE invoice_id = $1
+        `,
+        [invoiceId]
+      );
+
+      await tx.execute(
+        `
+          DELETE FROM invoice_line_items
+          WHERE invoice_id = $1
+        `,
+        [invoiceId]
+      );
+
+      await tx.execute(
+        `
+          DELETE FROM invoices
+          WHERE id = $1
+        `,
+        [invoiceId]
+      );
+
+      await tx.execute(
+        `
+          DELETE FROM documents
+          WHERE
+            id = $1
+            AND organisation_id = $2
+        `,
+        [
+          invoice.documentId,
+          organisationId,
+        ]
+      );
+    }
+  );
+}
+
 async function runScenarios(
   organisationId
 ) {
-  requireOrganisationId(
+  await requireOrganisationId(
     organisationId
   );
 
@@ -1109,140 +1271,32 @@ async function runScenarios(
    * Reset only the selected organisation's
    * APPA-SCN-* synthetic scenario data.
    */
-  removeScenarioData(
+  await removeScenarioData(
     organisationId
   );
 
   const seeded =
-    seedScenarios(
+    await seedScenarios(
       organisationId
     );
 
+  /*
+   * The duplicate scenario is initially
+   * seeded so the scenario contract remains
+   * identical to the previous implementation.
+   * Remove it before executing the first three
+   * scenarios, then recreate it after the clean
+   * invoice has been matched.
+   */
   const duplicateSeedId =
     seeded.scenarios
       .duplicateInvoice
       .invoiceId;
 
-  const duplicateDocument =
-    db.prepare(`
-      SELECT
-        i.document_id AS documentId
-
-      FROM invoices i
-
-      INNER JOIN documents d
-        ON d.id =
-           i.document_id
-
-      WHERE
-        i.id = ?
-        AND d.organisation_id = ?
-    `).get(
-      duplicateSeedId,
-      organisationId
-    );
-
-  if (
-    duplicateSeedId &&
-    duplicateDocument
-  ) {
-    db.prepare(`
-      DELETE FROM approvals
-      WHERE
-        invoice_id = ?
-        AND invoice_id IN (
-          SELECT i.id
-          FROM invoices i
-          INNER JOIN documents d
-            ON d.id =
-               i.document_id
-          WHERE
-            d.organisation_id = ?
-        )
-    `).run(
-      duplicateSeedId,
-      organisationId
-    );
-
-    db.prepare(`
-      DELETE FROM exceptions
-      WHERE
-        invoice_id = ?
-        AND invoice_id IN (
-          SELECT i.id
-          FROM invoices i
-          INNER JOIN documents d
-            ON d.id =
-               i.document_id
-          WHERE
-            d.organisation_id = ?
-        )
-    `).run(
-      duplicateSeedId,
-      organisationId
-    );
-
-    db.prepare(`
-      DELETE FROM invoice_matches
-      WHERE
-        invoice_id = ?
-        AND invoice_id IN (
-          SELECT i.id
-          FROM invoices i
-          INNER JOIN documents d
-            ON d.id =
-               i.document_id
-          WHERE
-            d.organisation_id = ?
-        )
-    `).run(
-      duplicateSeedId,
-      organisationId
-    );
-
-    db.prepare(`
-      DELETE FROM invoice_line_items
-      WHERE
-        invoice_id = ?
-        AND invoice_id IN (
-          SELECT i.id
-          FROM invoices i
-          INNER JOIN documents d
-            ON d.id =
-               i.document_id
-          WHERE
-            d.organisation_id = ?
-        )
-    `).run(
-      duplicateSeedId,
-      organisationId
-    );
-
-    db.prepare(`
-      DELETE FROM invoices
-      WHERE
-        id = ?
-        AND document_id IN (
-          SELECT id
-          FROM documents
-          WHERE organisation_id = ?
-        )
-    `).run(
-      duplicateSeedId,
-      organisationId
-    );
-
-    db.prepare(`
-      DELETE FROM documents
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).run(
-      duplicateDocument
-        .documentId,
-      organisationId
-    );
-  }
+  await removeSingleInvoice(
+    duplicateSeedId,
+    organisationId
+  );
 
   const executions = [];
 
@@ -1252,11 +1306,9 @@ async function runScenarios(
   ) {
     try {
       const result =
-        await Promise.resolve(
-          matchInvoice(
-            invoiceId,
-            organisationId
-          )
+        await matchInvoice(
+          invoiceId,
+          organisationId
         );
 
       executions.push({
@@ -1305,35 +1357,41 @@ async function runScenarios(
   );
 
   const supplier =
-    db.prepare(`
-      SELECT *
-      FROM suppliers
-      WHERE
-        supplier_code = ?
-        AND organisation_id = ?
-    `).get(
-      `${SCENARIO_PREFIX}SUPPLIER`,
-      organisationId
+    await db.one(
+      `
+        SELECT *
+        FROM suppliers
+        WHERE
+          supplier_code = $1
+          AND organisation_id = $2
+      `,
+      [
+        `${SCENARIO_PREFIX}SUPPLIER`,
+        organisationId,
+      ]
     );
 
   const purchaseOrder =
-    db.prepare(`
-      SELECT po.*
+    await db.one(
+      `
+        SELECT po.*
 
-      FROM purchase_orders po
+        FROM purchase_orders po
 
-      INNER JOIN suppliers s
-        ON s.id =
-           po.supplier_id
+        INNER JOIN suppliers s
+          ON s.id =
+            po.supplier_id
 
-      WHERE
-        po.po_number = ?
-        AND po.organisation_id = ?
-        AND s.organisation_id = ?
-    `).get(
-      `${SCENARIO_PREFIX}PO-1001`,
-      organisationId,
-      organisationId
+        WHERE
+          po.po_number = $1
+          AND po.organisation_id = $2
+          AND s.organisation_id = $3
+      `,
+      [
+        `${SCENARIO_PREFIX}PO-1001`,
+        organisationId,
+        organisationId,
+      ]
     );
 
   if (
@@ -1346,7 +1404,7 @@ async function runScenarios(
   }
 
   const duplicateInvoiceId =
-    createInvoice({
+    await createInvoice({
       organisationId,
       scenario:
         "DUPLICATE_INVOICE",
@@ -1367,7 +1425,7 @@ async function runScenarios(
   );
 
   const results =
-    getScenarioResults(
+    await getScenarioResults(
       organisationId
     );
 
@@ -1392,7 +1450,7 @@ async function runScenarios(
       passed === 4,
   };
 
-  audit(
+  await audit(
     organisationId,
     "SCENARIO_TEST_RUN",
     "system",

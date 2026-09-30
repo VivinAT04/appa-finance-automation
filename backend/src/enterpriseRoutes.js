@@ -26,12 +26,13 @@ const router = express.Router();
    HELPERS
    ========================================================= */
 
-function createAudit(
+async function createAudit(
   organisationId,
   action,
   entityType,
   entityId,
-  description
+  description,
+  client = db
 ) {
   if (!organisationId) {
     throw new Error(
@@ -39,25 +40,28 @@ function createAudit(
     );
   }
 
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
+  await client.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        action,
+        entity_type,
+        entity_id,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `,
+    [
+      randomUUID(),
       action,
-      entity_type,
-      entity_id,
+      entityType,
+      entityId,
       description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    action,
-    entityType,
-    entityId,
-    description,
-    new Date().toISOString(),
-    organisationId
+      new Date().toISOString(),
+      organisationId,
+    ]
   );
 }
 
@@ -67,25 +71,25 @@ function createAudit(
 
 router.get(
   "/suppliers",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
-    const suppliers = db.prepare(`
+    const suppliers = await db.many(`
       SELECT
         id,
-        supplier_code AS supplierCode,
+        supplier_code AS "supplierCode",
         name,
         email,
-        tax_id AS taxId,
-        payment_terms_days AS paymentTermsDays,
+        tax_id AS "taxId",
+        payment_terms_days AS "paymentTermsDays",
         status,
-        created_at AS createdAt,
-        updated_at AS updatedAt
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM suppliers
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       ORDER BY name
-    `).all(organisationId);
+    `, [organisationId]);
 
     res.json({
       success: true,
@@ -100,25 +104,25 @@ router.get(
 
 router.get(
   "/purchase-orders",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
-    const purchaseOrders = db.prepare(`
+    const purchaseOrders = await db.many(`
       SELECT
         po.id,
-        po.po_number AS poNumber,
-        po.supplier_id AS supplierId,
-        s.name AS supplierName,
-        s.supplier_code AS supplierCode,
-        po.order_date AS orderDate,
+        po.po_number AS "poNumber",
+        po.supplier_id AS "supplierId",
+        s.name AS "supplierName",
+        s.supplier_code AS "supplierCode",
+        po.order_date AS "orderDate",
         po.currency,
         po.subtotal,
-        po.tax_amount AS taxAmount,
-        po.total_amount AS totalAmount,
+        po.tax_amount AS "taxAmount",
+        po.total_amount AS "totalAmount",
         po.status,
-        po.created_at AS createdAt,
-        po.updated_at AS updatedAt
+        po.created_at AS "createdAt",
+        po.updated_at AS "updatedAt"
       FROM purchase_orders po
 
       INNER JOIN suppliers s
@@ -127,11 +131,11 @@ router.get(
             po.organisation_id
 
       WHERE
-        po.organisation_id = ?
+        po.organisation_id = $1
 
       ORDER BY
         po.created_at DESC
-    `).all(organisationId);
+    `, [organisationId]);
 
     res.json({
       success: true,
@@ -142,27 +146,27 @@ router.get(
 
 router.get(
   "/purchase-orders/:id",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
     const purchaseOrder =
-      db.prepare(`
+      await db.one(`
         SELECT
           po.id,
-          po.po_number AS poNumber,
-          po.supplier_id AS supplierId,
-          s.name AS supplierName,
-          s.supplier_code AS supplierCode,
-          s.email AS supplierEmail,
-          po.order_date AS orderDate,
+          po.po_number AS "poNumber",
+          po.supplier_id AS "supplierId",
+          s.name AS "supplierName",
+          s.supplier_code AS "supplierCode",
+          s.email AS "supplierEmail",
+          po.order_date AS "orderDate",
           po.currency,
           po.subtotal,
-          po.tax_amount AS taxAmount,
-          po.total_amount AS totalAmount,
+          po.tax_amount AS "taxAmount",
+          po.total_amount AS "totalAmount",
           po.status,
-          po.created_at AS createdAt,
-          po.updated_at AS updatedAt
+          po.created_at AS "createdAt",
+          po.updated_at AS "updatedAt"
         FROM purchase_orders po
 
         INNER JOIN suppliers s
@@ -171,12 +175,10 @@ router.get(
               po.organisation_id
 
         WHERE
-          po.id = ?
-          AND po.organisation_id = ?
-      `).get(
-        req.params.id,
-        organisationId
-      );
+          po.id = $1
+          AND po.organisation_id = $2
+      `, [req.params.id,
+        organisationId]);
 
     if (!purchaseOrder) {
       return res.status(404).json({
@@ -187,13 +189,13 @@ router.get(
     }
 
     purchaseOrder.lineItems =
-      db.prepare(`
+      await db.many(`
         SELECT
           poi.id,
           poi.description,
           poi.quantity,
-          poi.unit_price AS unitPrice,
-          poi.line_total AS lineTotal,
+          poi.unit_price AS "unitPrice",
+          poi.line_total AS "lineTotal",
           poi.position
         FROM purchase_order_items poi
 
@@ -202,14 +204,12 @@ router.get(
              poi.purchase_order_id
 
         WHERE
-          poi.purchase_order_id = ?
-          AND po.organisation_id = ?
+          poi.purchase_order_id = $1
+          AND po.organisation_id = $2
 
         ORDER BY poi.position
-      `).all(
-        purchaseOrder.id,
-        organisationId
-      );
+      `, [purchaseOrder.id,
+        organisationId]);
 
     res.json({
       success: true,
@@ -224,13 +224,13 @@ router.get(
 
 router.post(
   "/matching/:invoiceId",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
       const match =
-        matchInvoice(
+        await matchInvoice(
           req.params.invoiceId,
           organisationId
         );
@@ -247,12 +247,12 @@ router.post(
 
 router.get(
   "/matching/:invoiceId",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
     const match =
-      getMatch(
+      await getMatch(
         req.params.invoiceId,
         organisationId
       );
@@ -279,13 +279,13 @@ router.get(
 
 router.get(
   "/operations-summary",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
       const openExceptions =
-        db.prepare(`
+        await db.one(`
           SELECT COUNT(*) AS count
           FROM exceptions e
 
@@ -297,13 +297,11 @@ router.get(
 
           WHERE
             e.status = 'Open'
-            AND d.organisation_id = ?
-        `).get(
-          organisationId
-        ).count;
+            AND d.organisation_id = $1
+        `, [organisationId]).count;
 
       const pendingApprovals =
-        db.prepare(`
+        await db.one(`
           SELECT COUNT(*) AS count
           FROM invoices i
 
@@ -314,7 +312,7 @@ router.get(
             ON m.invoice_id = i.id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
             AND m.match_status = 'Matched'
 
             AND NOT EXISTS (
@@ -330,12 +328,10 @@ router.get(
               FROM approvals a
               WHERE a.invoice_id = i.id
             )
-        `).get(
-          organisationId
-        ).count;
+        `, [organisationId]).count;
 
       const exceptionInvoices =
-        db.prepare(`
+        await db.one(`
           SELECT
             COUNT(
               DISTINCT e.invoice_id
@@ -350,27 +346,23 @@ router.get(
 
           WHERE
             e.status = 'Open'
-            AND d.organisation_id = ?
-        `).get(
-          organisationId
-        ).count;
+            AND d.organisation_id = $1
+        `, [organisationId]).count;
 
       const latestAutomation =
-        db.prepare(`
+        await db.one(`
           SELECT
             id,
-            process_name AS processName,
+            process_name AS "processName",
             source,
             status,
-            started_at AS startedAt,
-            completed_at AS completedAt
+            started_at AS "startedAt",
+            completed_at AS "completedAt"
           FROM automation_runs
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
           ORDER BY started_at DESC
           LIMIT 1
-        `).get(
-          organisationId
-        ) || null;
+        `, [organisationId]) || null;
 
       res.json({
         success: true,
@@ -392,33 +384,33 @@ router.get(
 
 router.get(
   "/approvals/pending",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
       const pending =
-        db.prepare(`
+        await db.many(`
           SELECT
-            i.id AS invoiceId,
-            i.invoice_number AS invoiceNumber,
-            i.supplier_name AS supplierName,
+            i.id AS "invoiceId",
+            i.invoice_number AS "invoiceNumber",
+            i.supplier_name AS "supplierName",
             i.currency,
-            i.total_amount AS totalAmount,
+            i.total_amount AS "totalAmount",
             i.purchase_order_number
-              AS purchaseOrderNumber,
-            i.invoice_date AS invoiceDate,
-            i.due_date AS dueDate,
+              AS "purchaseOrderNumber",
+            i.invoice_date AS "invoiceDate",
+            i.due_date AS "dueDate",
             i.extraction_confidence
-              AS extractionConfidence,
+              AS "extractionConfidence",
             i.validation_status
-              AS validationStatus,
+              AS "validationStatus",
 
-            m.match_score AS matchScore,
-            m.match_status AS matchStatus,
+            m.match_score AS "matchScore",
+            m.match_status AS "matchStatus",
             m.variance_amount
-              AS varianceAmount,
-            m.updated_at AS matchedAt,
+              AS "varianceAmount",
+            m.updated_at AS "matchedAt",
 
             (
               SELECT COUNT(*)
@@ -426,7 +418,7 @@ router.get(
               WHERE
                 e.invoice_id = i.id
                 AND e.status = 'Open'
-            ) AS openExceptionCount
+            ) AS "openExceptionCount"
 
           FROM invoices i
 
@@ -437,7 +429,7 @@ router.get(
             ON m.invoice_id = i.id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
             AND m.match_status = 'Matched'
 
             AND NOT EXISTS (
@@ -456,9 +448,7 @@ router.get(
 
           ORDER BY
             m.updated_at DESC
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       res.json({
         success: true,
@@ -476,26 +466,26 @@ router.get(
 
 router.get(
   "/approvals",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
     const approvals =
-      db.prepare(`
+      await db.many(`
         SELECT
           a.id,
-          a.invoice_id AS invoiceId,
+          a.invoice_id AS "invoiceId",
 
-          i.invoice_number AS invoiceNumber,
-          i.supplier_name AS supplierName,
+          i.invoice_number AS "invoiceNumber",
+          i.supplier_name AS "supplierName",
           i.currency,
-          i.total_amount AS totalAmount,
+          i.total_amount AS "totalAmount",
 
           a.decision,
-          a.approval_type AS approvalType,
+          a.approval_type AS "approvalType",
           a.approver,
           a.comments,
-          a.created_at AS createdAt
+          a.created_at AS "createdAt"
 
         FROM approvals a
 
@@ -506,13 +496,11 @@ router.get(
           ON d.id = i.document_id
 
         WHERE
-          d.organisation_id = ?
+          d.organisation_id = $1
 
         ORDER BY
           a.created_at DESC
-      `).all(
-        organisationId
-      );
+      `, [organisationId]);
 
     res.json({
       success: true,
@@ -523,7 +511,7 @@ router.get(
 
 router.post(
   "/approvals/:invoiceId",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
@@ -550,7 +538,7 @@ router.post(
     }
 
     const invoice =
-      db.prepare(`
+      await db.one(`
         SELECT i.*
         FROM invoices i
 
@@ -558,12 +546,10 @@ router.post(
           ON d.id = i.document_id
 
         WHERE
-          i.id = ?
-          AND d.organisation_id = ?
-      `).get(
-        req.params.invoiceId,
-        organisationId
-      );
+          i.id = $1
+          AND d.organisation_id = $2
+      `, [req.params.invoiceId,
+        organisationId]);
 
     if (!invoice) {
       return res.status(404).json({
@@ -574,7 +560,7 @@ router.post(
     }
 
     const openExceptionCount =
-      db.prepare(`
+      await db.one(`
         SELECT COUNT(*) AS count
         FROM exceptions e
 
@@ -585,13 +571,11 @@ router.post(
           ON d.id = i.document_id
 
         WHERE
-          e.invoice_id = ?
+          e.invoice_id = $1
           AND e.status = 'Open'
-          AND d.organisation_id = ?
-      `).get(
-        invoice.id,
-        organisationId
-      ).count;
+          AND d.organisation_id = $2
+      `, [invoice.id,
+        organisationId]).count;
 
     if (
       decision === "Approved" &&
@@ -610,7 +594,7 @@ router.post(
     const createdAt =
       new Date().toISOString();
 
-    db.prepare(`
+    await db.execute(`
       INSERT INTO approvals (
         id,
         invoice_id,
@@ -620,9 +604,8 @@ router.post(
         comments,
         created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      approvalId,
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [approvalId,
       invoice.id,
       decision,
       "Manual",
@@ -630,9 +613,9 @@ router.post(
         "Authenticated User",
       String(comments || "").trim(),
       createdAt
-    );
+    ]);
 
-    createAudit(
+    await createAudit(
       organisationId,
       "INVOICE_APPROVAL_RECORDED",
       "approval",
@@ -641,15 +624,15 @@ router.post(
     );
 
     const approval =
-      db.prepare(`
+      await db.one(`
         SELECT
           a.id,
-          a.invoice_id AS invoiceId,
+          a.invoice_id AS "invoiceId",
           a.decision,
-          a.approval_type AS approvalType,
+          a.approval_type AS "approvalType",
           a.approver,
           a.comments,
-          a.created_at AS createdAt
+          a.created_at AS "createdAt"
         FROM approvals a
 
         INNER JOIN invoices i
@@ -659,12 +642,10 @@ router.post(
           ON d.id = i.document_id
 
         WHERE
-          a.id = ?
-          AND d.organisation_id = ?
-      `).get(
-        approvalId,
-        organisationId
-      );
+          a.id = $1
+          AND d.organisation_id = $2
+      `, [approvalId,
+        organisationId]);
 
     res.status(201).json({
       success: true,
@@ -679,28 +660,28 @@ router.post(
 
 router.get(
   "/exceptions",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
     const exceptions =
-      db.prepare(`
+      await db.many(`
         SELECT
           e.id,
-          e.invoice_id AS invoiceId,
+          e.invoice_id AS "invoiceId",
 
-          i.invoice_number AS invoiceNumber,
-          i.supplier_name AS supplierName,
+          i.invoice_number AS "invoiceNumber",
+          i.supplier_name AS "supplierName",
           i.currency,
-          i.total_amount AS totalAmount,
+          i.total_amount AS "totalAmount",
 
-          e.exception_type AS exceptionType,
+          e.exception_type AS "exceptionType",
           e.severity,
           e.description,
           e.status,
           e.resolution,
-          e.created_at AS createdAt,
-          e.resolved_at AS resolvedAt
+          e.created_at AS "createdAt",
+          e.resolved_at AS "resolvedAt"
 
         FROM exceptions e
 
@@ -711,7 +692,7 @@ router.get(
           ON d.id = i.document_id
 
         WHERE
-          d.organisation_id = ?
+          d.organisation_id = $1
 
         ORDER BY
           CASE e.status
@@ -719,9 +700,7 @@ router.get(
             ELSE 1
           END,
           e.created_at DESC
-      `).all(
-        organisationId
-      );
+      `, [organisationId]);
 
     res.json({
       success: true,
@@ -732,7 +711,7 @@ router.get(
 
 router.post(
   "/exceptions/:id/resolve",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
@@ -750,10 +729,10 @@ router.post(
     }
 
     const exception =
-      db.prepare(`
+      await db.one(`
         SELECT
           e.*,
-          i.invoice_number AS invoiceNumber
+          i.invoice_number AS "invoiceNumber"
         FROM exceptions e
 
         INNER JOIN invoices i
@@ -763,12 +742,10 @@ router.post(
           ON d.id = i.document_id
 
         WHERE
-          e.id = ?
-          AND d.organisation_id = ?
-      `).get(
-        req.params.id,
-        organisationId
-      );
+          e.id = $1
+          AND d.organisation_id = $2
+      `, [req.params.id,
+        organisationId]);
 
     if (!exception) {
       return res.status(404).json({
@@ -782,14 +759,14 @@ router.post(
       new Date().toISOString();
 
     const update =
-      db.prepare(`
+      await db.execute(`
         UPDATE exceptions
         SET
           status = 'Resolved',
-          resolution = ?,
-          resolved_at = ?
+          resolution = $1,
+          resolved_at = $2
         WHERE
-          id = ?
+          id = $3
           AND invoice_id IN (
             SELECT i.id
             FROM invoices i
@@ -798,16 +775,14 @@ router.post(
               ON d.id = i.document_id
 
             WHERE
-              d.organisation_id = ?
+              d.organisation_id = $4
           )
-      `).run(
-        resolution,
+      `, [resolution,
         now,
         exception.id,
-        organisationId
-      );
+        organisationId]);
 
-    if (update.changes !== 1) {
+    if (update.rowCount !== 1) {
       return res.status(404).json({
         success: false,
         message:
@@ -815,7 +790,7 @@ router.post(
       });
     }
 
-    createAudit(
+    await createAudit(
       organisationId,
       "EXCEPTION_RESOLVED",
       "exception",
@@ -824,17 +799,17 @@ router.post(
     );
 
     const resolved =
-      db.prepare(`
+      await db.one(`
         SELECT
           e.id,
-          e.invoice_id AS invoiceId,
-          e.exception_type AS exceptionType,
+          e.invoice_id AS "invoiceId",
+          e.exception_type AS "exceptionType",
           e.severity,
           e.description,
           e.status,
           e.resolution,
-          e.created_at AS createdAt,
-          e.resolved_at AS resolvedAt
+          e.created_at AS "createdAt",
+          e.resolved_at AS "resolvedAt"
         FROM exceptions e
 
         INNER JOIN invoices i
@@ -844,12 +819,10 @@ router.post(
           ON d.id = i.document_id
 
         WHERE
-          e.id = ?
-          AND d.organisation_id = ?
-      `).get(
-        exception.id,
-        organisationId
-      );
+          e.id = $1
+          AND d.organisation_id = $2
+      `, [exception.id,
+        organisationId]);
 
     res.json({
       success: true,
@@ -864,29 +837,27 @@ router.post(
 
 router.get(
   "/automation-runs",
-  (req, res) => {
+  async (req, res) => {
     const organisationId =
       req.organisation.id;
 
-    const runs = db.prepare(`
+    const runs = await db.many(`
       SELECT
         id,
-        process_name AS processName,
+        process_name AS "processName",
         source,
         status,
-        items_processed AS itemsProcessed,
-        items_succeeded AS itemsSucceeded,
-        items_failed AS itemsFailed,
-        started_at AS startedAt,
-        completed_at AS completedAt,
+        items_processed AS "itemsProcessed",
+        items_succeeded AS "itemsSucceeded",
+        items_failed AS "itemsFailed",
+        started_at AS "startedAt",
+        completed_at AS "completedAt",
         details
       FROM automation_runs
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       ORDER BY started_at DESC
       LIMIT 100
-    `).all(
-      organisationId
-    );
+    `, [organisationId]);
 
     res.json({
       success: true,
@@ -897,7 +868,7 @@ router.get(
 
 router.post(
   "/automation/run-ap-cycle",
-  (req, res, next) => {
+  async (req, res, next) => {
     const organisationId =
       req.organisation.id;
 
@@ -911,7 +882,7 @@ router.post(
       req.body?.source ||
       "APPA Engine";
 
-    db.prepare(`
+    await db.execute(`
       INSERT INTO automation_runs (
         id,
         process_name,
@@ -921,20 +892,18 @@ router.post(
         details,
         organisation_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      runId,
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [runId,
       "Accounts Payable Matching Cycle",
       source,
       "Running",
       startedAt,
       "Processing validated invoices through the APPA PO matching engine.",
-      organisationId
-    );
+      organisationId]);
 
     try {
       const invoices =
-        db.prepare(`
+        await db.many(`
           SELECT i.id
           FROM invoices i
 
@@ -944,10 +913,8 @@ router.post(
           WHERE
             i.validation_status =
               'Validated'
-            AND d.organisation_id = ?
-        `).all(
-          organisationId
-        );
+            AND d.organisation_id = $1
+        `, [organisationId]);
 
       let succeeded = 0;
       let failed = 0;
@@ -958,7 +925,7 @@ router.post(
       ) {
         try {
           const matchResult =
-            matchInvoice(
+            await matchInvoice(
               invoice.id,
               organisationId
             );
@@ -991,20 +958,19 @@ router.post(
           : "Completed";
 
       const update =
-        db.prepare(`
+        await db.execute(`
           UPDATE automation_runs
           SET
-            status = ?,
-            items_processed = ?,
-            items_succeeded = ?,
-            items_failed = ?,
-            completed_at = ?,
-            details = ?
+            status = $1,
+            items_processed = $2,
+            items_succeeded = $3,
+            items_failed = $4,
+            completed_at = $5,
+            details = $6
           WHERE
-            id = ?
-            AND organisation_id = ?
-        `).run(
-          status,
+            id = $7
+            AND organisation_id = $8
+        `, [status,
           invoices.length,
           succeeded,
           failed,
@@ -1012,15 +978,15 @@ router.post(
           `Processed ${invoices.length} validated invoice(s).`,
           runId,
           organisationId
-        );
+        ]);
 
-      if (update.changes !== 1) {
+      if (update.rowCount !== 1) {
         throw new Error(
           "Automation run ownership validation failed."
         );
       }
 
-      createAudit(
+      await createAudit(
         organisationId,
         "AUTOMATION_RUN_COMPLETED",
         "automation_run",
@@ -1029,47 +995,45 @@ router.post(
       );
 
       const run =
-        db.prepare(`
+        await db.one(`
           SELECT
             id,
-            process_name AS processName,
+            process_name AS "processName",
             source,
             status,
-            items_processed AS itemsProcessed,
-            items_succeeded AS itemsSucceeded,
-            items_failed AS itemsFailed,
-            started_at AS startedAt,
-            completed_at AS completedAt,
+            items_processed AS "itemsProcessed",
+            items_succeeded AS "itemsSucceeded",
+            items_failed AS "itemsFailed",
+            started_at AS "startedAt",
+            completed_at AS "completedAt",
             details
           FROM automation_runs
           WHERE
-            id = ?
-            AND organisation_id = ?
-        `).get(
-          runId,
-          organisationId
-        );
+            id = $1
+            AND organisation_id = $2
+        `, [runId,
+          organisationId]);
 
       res.json({
         success: true,
         run,
       });
     } catch (error) {
-      db.prepare(`
+      await db.execute(`
         UPDATE automation_runs
         SET
           status = 'Failed',
-          completed_at = ?,
-          details = ?
+          completed_at = $1,
+          details = $2
         WHERE
-          id = ?
-          AND organisation_id = ?
-      `).run(
+          id = $3
+          AND organisation_id = $4
+      `, [
         new Date().toISOString(),
         error.message,
         runId,
-        organisationId
-      );
+        organisationId,
+      ]);
 
       next(error);
     }
@@ -1082,17 +1046,20 @@ router.post(
 
 router.get(
   "/dashboard",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
-      function scalar(
+      async function scalar(
         sql,
         params = [organisationId]
       ) {
         const row =
-          db.prepare(sql).get(...params);
+          await db.one(
+            sql,
+            params
+          );
 
         return Number(
           row?.value || 0
@@ -1100,21 +1067,21 @@ router.get(
       }
 
       const dashboard = {
-        documents: scalar(`
+        documents: await scalar(`
           SELECT COUNT(*) AS value
           FROM documents
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
         `),
 
-        invoices: scalar(`
+        invoices: await scalar(`
           SELECT COUNT(*) AS value
           FROM invoices i
           INNER JOIN documents d
             ON d.id = i.document_id
-          WHERE d.organisation_id = ?
+          WHERE d.organisation_id = $1
         `),
 
-        invoiceValue: scalar(`
+        invoiceValue: await scalar(`
           SELECT
             COALESCE(
               SUM(i.total_amount),
@@ -1123,22 +1090,22 @@ router.get(
           FROM invoices i
           INNER JOIN documents d
             ON d.id = i.document_id
-          WHERE d.organisation_id = ?
+          WHERE d.organisation_id = $1
         `),
 
-        suppliers: scalar(`
+        suppliers: await scalar(`
           SELECT COUNT(*) AS value
           FROM suppliers
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
         `),
 
-        purchaseOrders: scalar(`
+        purchaseOrders: await scalar(`
           SELECT COUNT(*) AS value
           FROM purchase_orders
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
         `),
 
-        matchedInvoices: scalar(`
+        matchedInvoices: await scalar(`
           SELECT COUNT(*) AS value
           FROM invoice_matches im
           INNER JOIN invoices i
@@ -1147,10 +1114,10 @@ router.get(
             ON d.id = i.document_id
           WHERE
             im.match_status = 'Matched'
-            AND d.organisation_id = ?
+            AND d.organisation_id = $1
         `),
 
-        openExceptions: scalar(`
+        openExceptions: await scalar(`
           SELECT COUNT(*) AS value
           FROM exceptions e
           INNER JOIN invoices i
@@ -1159,10 +1126,10 @@ router.get(
             ON d.id = i.document_id
           WHERE
             e.status = 'Open'
-            AND d.organisation_id = ?
+            AND d.organisation_id = $1
         `),
 
-        approvals: scalar(`
+        approvals: await scalar(`
           SELECT COUNT(*) AS value
           FROM approvals a
           INNER JOIN invoices i
@@ -1171,18 +1138,18 @@ router.get(
             ON d.id = i.document_id
           WHERE
             a.decision = 'Approved'
-            AND d.organisation_id = ?
+            AND d.organisation_id = $1
         `),
 
-        automationRuns: scalar(`
+        automationRuns: await scalar(`
           SELECT COUNT(*) AS value
           FROM automation_runs
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
         `),
       };
 
       const pendingApprovals =
-        scalar(`
+        await scalar(`
           SELECT COUNT(*) AS value
           FROM invoices i
 
@@ -1190,7 +1157,7 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
             AND NOT EXISTS (
               SELECT 1
@@ -1202,7 +1169,7 @@ router.get(
         `);
 
       const pendingApprovalValue =
-        scalar(`
+        await scalar(`
           SELECT
             COALESCE(
               SUM(i.total_amount),
@@ -1215,7 +1182,7 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
             AND NOT EXISTS (
               SELECT 1
@@ -1227,7 +1194,7 @@ router.get(
         `);
 
       const automationTotals =
-        db.prepare(`
+        await db.one(`
           SELECT
             COALESCE(
               SUM(items_processed),
@@ -1245,10 +1212,8 @@ router.get(
             ) AS failed
 
           FROM automation_runs
-          WHERE organisation_id = ?
-        `).get(
-          organisationId
-        );
+          WHERE organisation_id = $1
+        `, [organisationId]);
 
       const processedItems =
         Number(
@@ -1272,7 +1237,7 @@ router.get(
           : 0;
 
       const recentTransactions =
-        db.prepare(`
+        await db.many(`
           SELECT
             i.id,
             i.invoice_number AS invoice,
@@ -1285,12 +1250,12 @@ router.get(
             ) AS amount,
 
             i.validation_status
-              AS validationStatus,
+              AS "validationStatus",
 
-            i.updated_at AS updatedAt,
+            i.updated_at AS "updatedAt",
 
             im.match_status
-              AS matchStatus,
+              AS "matchStatus",
 
             (
               SELECT a.decision
@@ -1300,7 +1265,7 @@ router.get(
               ORDER BY
                 a.created_at DESC
               LIMIT 1
-            ) AS approvalDecision,
+            ) AS "approvalDecision",
 
             (
               SELECT COUNT(*)
@@ -1308,7 +1273,7 @@ router.get(
               WHERE
                 e.invoice_id = i.id
                 AND e.status = 'Open'
-            ) AS openExceptionCount
+            ) AS "openExceptionCount"
 
           FROM invoices i
 
@@ -1319,16 +1284,13 @@ router.get(
             ON im.invoice_id = i.id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
           ORDER BY
-            datetime(i.updated_at) DESC,
             i.updated_at DESC
 
           LIMIT 5
-        `).all(
-          organisationId
-        ).map((row) => {
+        `, [organisationId]).map((row) => {
           let status = "Processing";
 
           if (
@@ -1361,42 +1323,38 @@ router.get(
         });
 
       const recentAutomationRuns =
-        db.prepare(`
+        await db.many(`
           SELECT
             id,
             process_name AS title,
             source AS subtitle,
             status,
-            items_processed AS itemsProcessed,
-            items_succeeded AS itemsSucceeded,
-            items_failed AS itemsFailed,
-            started_at AS startedAt,
-            completed_at AS completedAt
+            items_processed AS "itemsProcessed",
+            items_succeeded AS "itemsSucceeded",
+            items_failed AS "itemsFailed",
+            started_at AS "startedAt",
+            completed_at AS "completedAt"
 
           FROM automation_runs
 
           WHERE
-            organisation_id = ?
+            organisation_id = $1
 
           ORDER BY
-            datetime(started_at) DESC,
             started_at DESC
 
           LIMIT 3
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       const dailyVolume =
-        db.prepare(`
-          WITH RECURSIVE days(day) AS (
-            SELECT date('now', '-6 days')
-
-            UNION ALL
-
-            SELECT date(day, '+1 day')
-            FROM days
-            WHERE day < date('now')
+        await db.many(`
+          WITH days(day) AS (
+            SELECT
+              generate_series(
+                CURRENT_DATE - INTERVAL '6 days',
+                CURRENT_DATE,
+                INTERVAL '1 day'
+              )::date
           )
 
           SELECT
@@ -1415,19 +1373,17 @@ router.get(
               ON d.id = i.document_id
 
             WHERE
-              d.organisation_id = ?
+              d.organisation_id = $1
           ) i
-            ON date(i.created_at) =
+            ON i.created_at::date =
                days.day
 
           GROUP BY days.day
           ORDER BY days.day
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       const mismatchCount =
-        scalar(`
+        await scalar(`
           SELECT COUNT(*) AS value
 
           FROM exceptions e
@@ -1440,7 +1396,7 @@ router.get(
 
           WHERE
             e.status = 'Open'
-            AND d.organisation_id = ?
+            AND d.organisation_id = $1
 
             AND (
               UPPER(e.exception_type)
@@ -1455,7 +1411,7 @@ router.get(
         `);
 
       const lowConfidenceDocuments =
-        scalar(`
+        await scalar(`
           SELECT COUNT(*) AS value
 
           FROM invoices i
@@ -1464,7 +1420,7 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
             AND COALESCE(
               i.extraction_confidence,
@@ -1473,7 +1429,7 @@ router.get(
         `);
 
       const overdueApprovals =
-        scalar(`
+        await scalar(`
           SELECT COUNT(*) AS value
 
           FROM invoices i
@@ -1482,13 +1438,11 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
-            AND datetime(i.created_at)
-              <= datetime(
-                'now',
-                '-24 hours'
-              )
+            AND i.created_at <=
+              CURRENT_TIMESTAMP -
+              INTERVAL '24 hours'
 
             AND NOT EXISTS (
               SELECT 1
@@ -1501,7 +1455,7 @@ router.get(
         `);
 
       const openHighSeverityExceptions =
-        scalar(`
+        await scalar(`
           SELECT COUNT(*) AS value
 
           FROM exceptions e
@@ -1516,7 +1470,7 @@ router.get(
             e.status = 'Open'
             AND UPPER(e.severity) =
               'HIGH'
-            AND d.organisation_id = ?
+            AND d.organisation_id = $1
         `);
 
       res.json({
@@ -1575,29 +1529,29 @@ router.get(
 
 router.get(
   "/reports",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
       const invoiceSummary =
-        db.prepare(`
+        await db.many(`
           SELECT
             i.currency,
 
-            COUNT(*) AS invoiceCount,
+            COUNT(*) AS "invoiceCount",
 
             COALESCE(
               SUM(i.total_amount),
               0
-            ) AS totalValue,
+            ) AS "totalValue",
 
             COALESCE(
               AVG(
                 i.extraction_confidence
               ),
               0
-            ) AS averageConfidence
+            ) AS "averageConfidence"
 
           FROM invoices i
 
@@ -1605,26 +1559,24 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
           GROUP BY
             i.currency
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       const matchSummary =
-        db.prepare(`
+        await db.many(`
           SELECT
             im.match_status
-              AS matchStatus,
+              AS "matchStatus",
 
             COUNT(*) AS count,
 
             COALESCE(
               AVG(im.match_score),
               0
-            ) AS averageScore
+            ) AS "averageScore"
 
           FROM invoice_matches im
 
@@ -1635,19 +1587,17 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
           GROUP BY
             im.match_status
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       const exceptionSummary =
-        db.prepare(`
+        await db.many(`
           SELECT
             e.exception_type
-              AS exceptionType,
+              AS "exceptionType",
 
             e.status,
 
@@ -1662,7 +1612,7 @@ router.get(
             ON d.id = i.document_id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
           GROUP BY
             e.exception_type,
@@ -1670,42 +1620,38 @@ router.get(
 
           ORDER BY
             count DESC
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       const automationSummary =
-        db.prepare(`
+        await db.many(`
           SELECT
             status,
 
-            COUNT(*) AS runCount,
+            COUNT(*) AS "runCount",
 
             COALESCE(
               SUM(items_processed),
               0
-            ) AS itemsProcessed,
+            ) AS "itemsProcessed",
 
             COALESCE(
               SUM(items_succeeded),
               0
-            ) AS itemsSucceeded,
+            ) AS "itemsSucceeded",
 
             COALESCE(
               SUM(items_failed),
               0
-            ) AS itemsFailed
+            ) AS "itemsFailed"
 
           FROM automation_runs
 
           WHERE
-            organisation_id = ?
+            organisation_id = $1
 
           GROUP BY
             status
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       res.json({
         success: true,
@@ -1745,7 +1691,7 @@ const DEFAULT_WORKFLOW_SETTINGS = [
   },
 ];
 
-function ensureWorkflowSettings(
+async function ensureWorkflowSettings(
   organisationId
 ) {
   if (!organisationId) {
@@ -1754,98 +1700,66 @@ function ensureWorkflowSettings(
     );
   }
 
-  const findSetting =
-    db.prepare(`
-      SELECT
-        setting_key,
-        organisation_id
-      FROM app_settings
-      WHERE setting_key = ?
-    `);
-
-  const insertSetting =
-    db.prepare(`
-      INSERT INTO app_settings (
-        setting_key,
-        setting_value,
-        description,
-        updated_at,
-        organisation_id
-      )
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
   const now =
     new Date().toISOString();
 
-  const transaction =
-    db.transaction(() => {
+  await db.transaction(
+    async (tx) => {
       for (
         const setting
         of DEFAULT_WORKFLOW_SETTINGS
       ) {
-        const existing =
-          findSetting.get(
-            setting.key
-          );
-
-        if (existing) {
-          if (
-            existing.organisation_id !==
-            organisationId
-          ) {
-            const error =
-              new Error(
-                `Workflow setting ${setting.key} belongs to another organisation. Per-organisation settings require the composite-key migration.`
-              );
-
-            error.status = 409;
-            error.code =
-              "SETTING_SCHEMA_MIGRATION_REQUIRED";
-
-            throw error;
-          }
-
-          continue;
-        }
-
-        insertSetting.run(
-          setting.key,
-          setting.value,
-          setting.description,
-          now,
-          organisationId
+        await tx.execute(
+          `
+            INSERT INTO app_settings (
+              setting_key,
+              setting_value,
+              description,
+              updated_at,
+              organisation_id
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (
+              setting_key,
+              organisation_id
+            )
+            DO NOTHING
+          `,
+          [
+            setting.key,
+            setting.value,
+            setting.description,
+            now,
+            organisationId,
+          ]
         );
       }
-    });
-
-  transaction();
+    }
+  );
 }
 
 router.get(
   "/settings",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
-      ensureWorkflowSettings(
+      await ensureWorkflowSettings(
         organisationId
       );
 
       const settings =
-        db.prepare(`
+        await db.many(`
           SELECT
             setting_key AS key,
             setting_value AS value,
             description,
-            updated_at AS updatedAt
+            updated_at AS "updatedAt"
           FROM app_settings
-          WHERE organisation_id = ?
+          WHERE organisation_id = $1
           ORDER BY setting_key
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       res.json({
         success: true,
@@ -1859,12 +1773,12 @@ router.get(
 
 router.put(
   "/settings/:key",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
-      ensureWorkflowSettings(
+      await ensureWorkflowSettings(
         organisationId
       );
 
@@ -1882,16 +1796,14 @@ router.put(
       }
 
       const setting =
-        db.prepare(`
+        await db.one(`
           SELECT *
           FROM app_settings
           WHERE
-            setting_key = ?
-            AND organisation_id = ?
-        `).get(
-          req.params.key,
-          organisationId
-        );
+            setting_key = $1
+            AND organisation_id = $2
+        `, [req.params.key,
+          organisationId]);
 
       if (!setting) {
         return res.status(404).json({
@@ -1902,22 +1814,21 @@ router.put(
       }
 
       const update =
-        db.prepare(`
+        await db.execute(`
           UPDATE app_settings
           SET
-            setting_value = ?,
-            updated_at = ?
+            setting_value = $1,
+            updated_at = $2
           WHERE
-            setting_key = ?
-            AND organisation_id = ?
-        `).run(
-          value,
+            setting_key = $3
+            AND organisation_id = $4
+        `, [value,
           new Date().toISOString(),
           req.params.key,
           organisationId
-        );
+        ]);
 
-      if (update.changes !== 1) {
+      if (update.rowCount !== 1) {
         return res.status(404).json({
           success: false,
           message:
@@ -1925,7 +1836,7 @@ router.put(
         });
       }
 
-      createAudit(
+      await createAudit(
         organisationId,
         "SETTING_UPDATED",
         "setting",
@@ -1953,27 +1864,27 @@ router.put(
 
 router.get(
   "/rpa/work-items",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
 
       const workItems =
-        db.prepare(`
+        await db.many(`
           SELECT
-            i.id AS invoiceId,
-            i.invoice_number AS invoiceNumber,
-            i.supplier_name AS supplierName,
-            i.purchase_order_number AS purchaseOrderNumber,
+            i.id AS "invoiceId",
+            i.invoice_number AS "invoiceNumber",
+            i.supplier_name AS "supplierName",
+            i.purchase_order_number AS "purchaseOrderNumber",
             i.currency,
-            i.total_amount AS totalAmount,
-            i.extraction_confidence AS extractionConfidence,
-            i.validation_status AS validationStatus,
+            i.total_amount AS "totalAmount",
+            i.extraction_confidence AS "extractionConfidence",
+            i.validation_status AS "validationStatus",
 
             COALESCE(
               m.match_status,
               'Not Processed'
-            ) AS matchStatus
+            ) AS "matchStatus"
 
           FROM invoices i
 
@@ -1984,7 +1895,7 @@ router.get(
             ON m.invoice_id = i.id
 
           WHERE
-            d.organisation_id = ?
+            d.organisation_id = $1
 
             AND i.validation_status =
               'Validated'
@@ -1997,9 +1908,7 @@ router.get(
 
           ORDER BY
             i.created_at
-        `).all(
-          organisationId
-        );
+        `, [organisationId]);
 
       res.json({
         success: true,
@@ -2015,7 +1924,7 @@ router.get(
 
 router.post(
   "/rpa/results",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const organisationId =
         req.organisation.id;
@@ -2040,22 +1949,20 @@ router.post(
       }
 
       const invoice =
-        db.prepare(`
+        await db.one(`
           SELECT
             i.id,
-            i.invoice_number AS invoiceNumber
+            i.invoice_number AS "invoiceNumber"
           FROM invoices i
 
           INNER JOIN documents d
             ON d.id = i.document_id
 
           WHERE
-            i.id = ?
-            AND d.organisation_id = ?
-        `).get(
-          invoiceId,
-          organisationId
-        );
+            i.id = $1
+            AND d.organisation_id = $2
+        `, [invoiceId,
+          organisationId]);
 
       if (!invoice) {
         return res.status(404).json({
@@ -2065,7 +1972,7 @@ router.post(
         });
       }
 
-      createAudit(
+      await createAudit(
         organisationId,
         "RPA_RESULT_RECEIVED",
         "invoice",
@@ -2098,9 +2005,9 @@ router.post(
 
 router.post(
   "/seed",
-  (_req, res) => {
+  async (_req, res) => {
     const result =
-      seedEnterpriseData(req.organisation.id);
+      await seedEnterpriseData(req.organisation.id);
 
     res.json({
       success: true,
@@ -2138,10 +2045,10 @@ router.post(
 
 router.post(
   "/scenarios/seed",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const result =
-        seedScenarios(
+        await seedScenarios(
           req.organisation.id
         );
 
@@ -2157,13 +2064,13 @@ router.post(
 
 router.get(
   "/scenarios",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       res.json({
         success: true,
 
         invoices:
-          getScenarioInvoices(
+          await getScenarioInvoices(
             req.organisation.id
           ),
       });
@@ -2175,10 +2082,10 @@ router.get(
 
 router.get(
   "/scenarios/results",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const results =
-        getScenarioResults(
+        await getScenarioResults(
           req.organisation.id
         );
 
@@ -2194,10 +2101,10 @@ router.get(
 
 router.delete(
   "/scenarios",
-  (req, res, next) => {
+  async (req, res, next) => {
     try {
       const result =
-        removeScenarioData(
+        await removeScenarioData(
           req.organisation.id
         );
 

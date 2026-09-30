@@ -1,24 +1,34 @@
-const { randomUUID } = require("crypto");
-const db = require("./database");
+const {
+  randomUUID,
+} = require("crypto");
 
-function seedEnterpriseData(organisationId) {
+const db =
+  require("./database");
+
+async function seedEnterpriseData(
+  organisationId
+) {
   if (!organisationId) {
     throw new Error(
       "organisationId is required to seed enterprise data."
     );
   }
 
-  const organisation = db.prepare(`
-    SELECT
-      id,
-      name,
-      code,
-      status
-    FROM organisations
-    WHERE
-      id = ?
-      AND status = 'Active'
-  `).get(organisationId);
+  const organisation =
+    await db.one(
+      `
+        SELECT
+          id,
+          name,
+          code,
+          status
+        FROM organisations
+        WHERE
+          id = $1
+          AND status = 'Active'
+      `,
+      [organisationId]
+    );
 
   if (!organisation) {
     throw new Error(
@@ -26,189 +36,119 @@ function seedEnterpriseData(organisationId) {
     );
   }
 
-  const now =
+  const timestamp =
     new Date().toISOString();
 
-  /*
-   * Supplier ownership is explicit.
-   *
-   * supplier_code is still globally UNIQUE in the
-   * current database schema. Block 14B.2E will migrate
-   * that constraint to:
-   *
-   *   UNIQUE(organisation_id, supplier_code)
-   *
-   * Until then, every lookup below still requires the
-   * selected organisation so data can never be silently
-   * reused across tenants.
-   */
-  let supplier = db.prepare(`
-    SELECT *
-    FROM suppliers
-    WHERE
-      supplier_code = ?
-      AND organisation_id = ?
-  `).get(
-    "SUP-DEMO-001",
-    organisationId
-  );
+  const supplierCode =
+    "SUP-DEMO-001";
 
-  if (!supplier) {
-    const conflictingSupplier =
-      db.prepare(`
-        SELECT
-          id,
-          organisation_id
+  let supplier =
+    await db.one(
+      `
+        SELECT *
         FROM suppliers
-        WHERE supplier_code = ?
-      `).get("SUP-DEMO-001");
-
-    if (
-      conflictingSupplier &&
-      conflictingSupplier.organisation_id !==
-        organisationId
-    ) {
-      throw new Error(
-        "Demo supplier code already belongs to another organisation. Per-organisation uniqueness migration is required before seeding this organisation."
-      );
-    }
-
-    const id =
-      randomUUID();
-
-    db.prepare(`
-      INSERT INTO suppliers (
-        id,
-        supplier_code,
-        name,
-        email,
-        tax_id,
-        payment_terms_days,
-        status,
-        created_at,
-        updated_at,
-        organisation_id
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `).run(
-      id,
-      "SUP-DEMO-001",
-      "Demo Office Supplies Ltd",
-      "accounts@demo-office.example",
-      "GST-DEMO-001",
-      30,
-      "Active",
-      now,
-      now,
-      organisationId
+        WHERE
+          supplier_code = $1
+          AND organisation_id = $2
+      `,
+      [
+        supplierCode,
+        organisationId,
+      ]
     );
 
-    supplier = db.prepare(`
-      SELECT *
-      FROM suppliers
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
-      id,
-      organisationId
+  if (!supplier) {
+    const supplierId =
+      randomUUID();
+
+    await db.execute(
+      `
+        INSERT INTO suppliers (
+          id,
+          supplier_code,
+          name,
+          email,
+          tax_id,
+          payment_terms_days,
+          status,
+          created_at,
+          updated_at,
+          organisation_id
+        )
+        VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10
+        )
+        ON CONFLICT (
+          organisation_id,
+          supplier_code
+        )
+        DO NOTHING
+      `,
+      [
+        supplierId,
+        supplierCode,
+        "Demo Office Supplies Ltd",
+        "accounts@demo-office.example",
+        "GST-DEMO-001",
+        30,
+        "Active",
+        timestamp,
+        timestamp,
+        organisationId,
+      ]
+    );
+
+    supplier =
+      await db.one(
+        `
+          SELECT *
+          FROM suppliers
+          WHERE
+            supplier_code = $1
+            AND organisation_id = $2
+        `,
+        [
+          supplierCode,
+          organisationId,
+        ]
+      );
+  }
+
+  if (!supplier) {
+    throw new Error(
+      "Unable to initialise demo supplier."
     );
   }
 
-  /*
-   * Purchase orders are isolated by organisation.
-   * The supplier must belong to the same organisation.
-   */
-  let po = db.prepare(`
-    SELECT
-      po.*
-    FROM purchase_orders po
+  const poNumber =
+    "PO-TEST-1001";
 
-    JOIN suppliers s
-      ON s.id = po.supplier_id
+  let po =
+    await db.one(
+      `
+        SELECT po.*
+        FROM purchase_orders po
 
-    WHERE
-      po.po_number = ?
-      AND po.organisation_id = ?
-      AND s.organisation_id = ?
-  `).get(
-    "PO-TEST-1001",
-    organisationId,
-    organisationId
-  );
+        INNER JOIN suppliers s
+          ON s.id =
+            po.supplier_id
 
-  if (!po) {
-    const conflictingPo =
-      db.prepare(`
-        SELECT
-          id,
-          organisation_id
-        FROM purchase_orders
-        WHERE po_number = ?
-      `).get("PO-TEST-1001");
-
-    if (
-      conflictingPo &&
-      conflictingPo.organisation_id !==
-        organisationId
-    ) {
-      throw new Error(
-        "Demo purchase-order number already belongs to another organisation. Per-organisation uniqueness migration is required before seeding this organisation."
-      );
-    }
-
-    const poId =
-      randomUUID();
-
-    db.prepare(`
-      INSERT INTO purchase_orders (
-        id,
-        po_number,
-        supplier_id,
-        order_date,
-        currency,
-        subtotal,
-        tax_amount,
-        total_amount,
-        status,
-        created_at,
-        updated_at,
-        organisation_id
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `).run(
-      poId,
-      "PO-TEST-1001",
-      supplier.id,
-      "2026-09-20",
-      "INR",
-      23000,
-      4140,
-      27140,
-      "Open",
-      now,
-      now,
-      organisationId
+        WHERE
+          po.po_number = $1
+          AND po.organisation_id = $2
+          AND s.organisation_id = $3
+      `,
+      [
+        poNumber,
+        organisationId,
+        organisationId,
+      ]
     );
 
-    const insert =
-      db.prepare(`
-        INSERT INTO purchase_order_items (
-          id,
-          purchase_order_id,
-          description,
-          quantity,
-          unit_price,
-          line_total,
-          position,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+  if (!po) {
+    const poId =
+      randomUUID();
 
     const items = [
       [
@@ -231,48 +171,151 @@ function seedEnterpriseData(organisationId) {
       ],
     ];
 
-    const insertItems =
-      db.transaction(() => {
-        items.forEach(
-          (item, index) => {
-            insert.run(
-              randomUUID(),
-              poId,
-              item[0],
-              item[1],
-              item[2],
-              item[3],
-              index + 1,
-              now
+    await db.transaction(
+      async (tx) => {
+        await tx.execute(
+          `
+            INSERT INTO purchase_orders (
+              id,
+              po_number,
+              supplier_id,
+              order_date,
+              currency,
+              subtotal,
+              tax_amount,
+              total_amount,
+              status,
+              created_at,
+              updated_at,
+              organisation_id
+            )
+            VALUES (
+              $1, $2, $3, $4,
+              $5, $6, $7, $8,
+              $9, $10, $11, $12
+            )
+            ON CONFLICT (
+              organisation_id,
+              po_number
+            )
+            DO NOTHING
+          `,
+          [
+            poId,
+            poNumber,
+            supplier.id,
+            "2026-09-20",
+            "INR",
+            23000,
+            4140,
+            27140,
+            "Open",
+            timestamp,
+            timestamp,
+            organisationId,
+          ]
+        );
+
+        const insertedPo =
+          await tx.one(
+            `
+              SELECT id
+              FROM purchase_orders
+              WHERE
+                po_number = $1
+                AND organisation_id = $2
+            `,
+            [
+              poNumber,
+              organisationId,
+            ]
+          );
+
+        if (!insertedPo) {
+          throw new Error(
+            "Unable to initialise demo purchase order."
+          );
+        }
+
+        const itemCount =
+          await tx.one(
+            `
+              SELECT
+                COUNT(*)::int AS count
+              FROM purchase_order_items
+              WHERE purchase_order_id = $1
+            `,
+            [insertedPo.id]
+          );
+
+        if (
+          Number(
+            itemCount?.count || 0
+          ) === 0
+        ) {
+          for (
+            let index = 0;
+            index < items.length;
+            index += 1
+          ) {
+            const item =
+              items[index];
+
+            await tx.execute(
+              `
+                INSERT INTO purchase_order_items (
+                  id,
+                  purchase_order_id,
+                  description,
+                  quantity,
+                  unit_price,
+                  line_total,
+                  position,
+                  created_at
+                )
+                VALUES (
+                  $1, $2, $3, $4,
+                  $5, $6, $7, $8
+                )
+              `,
+              [
+                randomUUID(),
+                insertedPo.id,
+                item[0],
+                item[1],
+                item[2],
+                item[3],
+                index + 1,
+                timestamp,
+              ]
             );
           }
-        );
-      });
+        }
+      }
+    );
 
-    insertItems();
+    po =
+      await db.one(
+        `
+          SELECT *
+          FROM purchase_orders
+          WHERE
+            po_number = $1
+            AND organisation_id = $2
+        `,
+        [
+          poNumber,
+          organisationId,
+        ]
+      );
+  }
 
-    po = db.prepare(`
-      SELECT *
-      FROM purchase_orders
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
-      poId,
-      organisationId
+  if (!po) {
+    throw new Error(
+      "Unable to initialise demo purchase order."
     );
   }
 
-  /*
-   * Workflow settings are organisation-owned.
-   *
-   * The current database still has setting_key as the
-   * global primary key. Block 14B.2E will migrate it to
-   * organisation-scoped uniqueness.
-   *
-   * Existing APPA settings are therefore reused only
-   * when they already belong to this organisation.
-   */
   const settings = [
     [
       "amount_tolerance",
@@ -292,43 +335,31 @@ function seedEnterpriseData(organisationId) {
   ];
 
   for (const row of settings) {
-    const existing =
-      db.prepare(`
-        SELECT
+    await db.execute(
+      `
+        INSERT INTO app_settings (
           setting_key,
+          setting_value,
+          description,
+          updated_at,
           organisation_id
-        FROM app_settings
-        WHERE setting_key = ?
-      `).get(row[0]);
-
-    if (existing) {
-      if (
-        existing.organisation_id !==
-        organisationId
-      ) {
-        throw new Error(
-          `Setting ${row[0]} belongs to another organisation. Per-organisation settings migration is required before seeding this organisation.`
-        );
-      }
-
-      continue;
-    }
-
-    db.prepare(`
-      INSERT INTO app_settings (
-        setting_key,
-        setting_value,
-        description,
-        updated_at,
-        organisation_id
-      )
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      row[0],
-      row[1],
-      row[2],
-      now,
-      organisationId
+        )
+        VALUES (
+          $1, $2, $3, $4, $5
+        )
+        ON CONFLICT (
+          organisation_id,
+          setting_key
+        )
+        DO NOTHING
+      `,
+      [
+        row[0],
+        row[1],
+        row[2],
+        timestamp,
+        organisationId,
+      ]
     );
   }
 

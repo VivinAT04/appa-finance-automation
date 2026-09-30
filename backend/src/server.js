@@ -11,6 +11,8 @@ const invoiceRoutes = require("./invoiceRoutes");
 const enterpriseRoutes = require("./enterpriseRoutes");
 const authRoutes = require("./authRoutes");
 const userRoutes = require("./userRoutes");
+const rpaRoutes = require("./rpaRoutes");
+const { requireRpaRobot } = require("./rpaAuth");
 const { requireAuth } = require("./authMiddleware");
 const {
   requireOrganisation,
@@ -42,6 +44,14 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+
+
+app.use(
+  "/api/rpa",
+  requireRpaRobot,
+  rpaRoutes
+);
+
 
 app.use(
   "/api/users",
