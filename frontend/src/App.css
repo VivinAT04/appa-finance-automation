@@ -5755,3 +5755,429 @@ input:-webkit-autofill {
     transition: none !important;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15B — RESPONSIVE DASHBOARD
+   ============================================================ */
+
+/*
+ * Dashboard layouts must be allowed to shrink inside the
+ * responsive application shell without forcing page overflow.
+ */
+.metric-grid,
+.dashboard-grid,
+.bottom-grid,
+.transactions-panel,
+.automation-panel,
+.overview-panel,
+.attention-panel,
+.panel,
+.table-wrap,
+.automation-score,
+.automation-row,
+.attention-item {
+  min-width: 0;
+}
+
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.transactions-panel table {
+  width: 100%;
+}
+
+/* ---------- LAPTOP / SMALL DESKTOP ---------- */
+
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-grid,
+  .bottom-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .transactions-panel,
+  .automation-panel,
+  .overview-panel,
+  .attention-panel {
+    width: 100%;
+  }
+
+  .automation-score {
+    grid-template-columns:
+      auto minmax(0, 1fr);
+  }
+}
+
+/* ---------- TABLET ---------- */
+
+@media (max-width: 960px) {
+  .metric-grid {
+    gap: 14px;
+  }
+
+  .metric-card {
+    min-width: 0;
+  }
+
+  .metric-value {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-grid,
+  .bottom-grid {
+    gap: 16px;
+  }
+
+  .panel {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .panel-heading {
+    gap: 14px;
+  }
+
+  .transactions-panel .table-wrap {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .transactions-panel table {
+    min-width: 700px;
+  }
+
+  .automation-row-copy {
+    min-width: 0;
+  }
+
+  .automation-row-copy strong,
+  .automation-row-copy span {
+    overflow-wrap: anywhere;
+  }
+
+  .chart {
+    min-width: 0;
+  }
+
+  .attention-item > div:nth-child(2) {
+    min-width: 0;
+  }
+
+  .attention-item strong,
+  .attention-item span {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------- MOBILE ---------- */
+
+@media (max-width: 720px) {
+  .metric-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+    gap: 11px;
+  }
+
+  .metric-card {
+    padding: 18px;
+  }
+
+  .metric-top {
+    gap: 12px;
+  }
+
+  .metric-top > span {
+    min-width: 0;
+  }
+
+  .metric-icon {
+    flex: 0 0 auto;
+  }
+
+  .metric-value {
+    font-size: clamp(
+      30px,
+      10vw,
+      40px
+    );
+    line-height: 1.05;
+  }
+
+  .metric-bottom {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .dashboard-grid,
+  .bottom-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .panel {
+    border-radius: 14px;
+  }
+
+  .panel-heading {
+    align-items: flex-start;
+    gap: 12px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .panel-heading > div:first-child {
+    min-width: 0;
+  }
+
+  .panel-heading h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .panel-heading p {
+    overflow-wrap: anywhere;
+  }
+
+  .text-button {
+    flex: 0 0 auto;
+    min-height: 40px;
+  }
+
+  /*
+   * Finance tables remain tables on mobile because invoice
+   * columns have semantic relationships. Horizontal scrolling
+   * is safer than compressing or hiding financial information.
+   */
+  .transactions-panel .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .transactions-panel table {
+    min-width: 660px;
+  }
+
+  .transactions-panel th,
+  .transactions-panel td {
+    white-space: nowrap;
+  }
+
+  .live-empty-row {
+    white-space: normal !important;
+  }
+
+  .automation-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .score-ring {
+    flex: 0 0 auto;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .automation-score > div:last-child {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .automation-score p {
+    overflow-wrap: anywhere;
+  }
+
+  .automation-list {
+    width: 100%;
+  }
+
+  .automation-row {
+    display: grid;
+    grid-template-columns:
+      auto minmax(0, 1fr);
+    gap: 10px 12px;
+    align-items: center;
+  }
+
+  .automation-row > .status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .automation-row-icon {
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  .live-automation-empty {
+    min-height: 72px;
+  }
+
+  .overview-panel {
+    overflow: hidden;
+  }
+
+  .overview-panel .panel-heading {
+    flex-wrap: wrap;
+  }
+
+  .period-button {
+    flex: 0 0 auto;
+  }
+
+  /*
+   * Keep all seven chart days visible without making labels
+   * unreadably small. Narrow devices can scroll the chart.
+   */
+  .chart {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+  }
+
+  .chart-column {
+    min-width: 42px;
+  }
+
+  .attention-item {
+    grid-template-columns:
+      auto minmax(0, 1fr) auto;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 11px;
+  }
+
+  .attention-icon {
+    flex: 0 0 auto;
+  }
+
+  .live-attention-button {
+    min-height: 68px;
+  }
+
+  .live-dashboard-state {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 150px;
+    padding: 24px 18px;
+    text-align: center;
+  }
+
+  .live-dashboard-state span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------- SMALL MOBILE ---------- */
+
+@media (max-width: 480px) {
+  .metric-card {
+    padding: 16px;
+  }
+
+  .metric-value {
+    font-size: 32px;
+  }
+
+  .metric-bottom {
+    font-size: 12px;
+  }
+
+  .panel-heading {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .panel-heading h2 {
+    font-size: 16px;
+  }
+
+  .panel-heading p {
+    font-size: 12px;
+  }
+
+  .transactions-panel table {
+    min-width: 620px;
+  }
+
+  .automation-score {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .automation-row {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .attention-item {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .attention-item > svg:last-child {
+    align-self: center;
+  }
+
+  .chart {
+    min-width: 0;
+  }
+
+  .chart-column {
+    min-width: 38px;
+  }
+}
+
+@media (max-width: 360px) {
+  .metric-card {
+    padding: 14px;
+  }
+
+  .metric-value {
+    font-size: 29px;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+  }
+
+  .panel-heading .text-button {
+    align-self: flex-start;
+  }
+
+  .automation-row {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .automation-row-icon {
+    grid-row: auto;
+  }
+
+  .automation-row > .status {
+    grid-column: 1;
+  }
+
+  .attention-item {
+    grid-template-columns:
+      auto minmax(0, 1fr);
+  }
+
+  .attention-item > svg:last-child {
+    display: none;
+  }
+}
