@@ -1237,7 +1237,7 @@ router.get(
           : 0;
 
       const recentTransactions =
-        await db.many(`
+        (await db.many(`
           SELECT
             i.id,
             i.invoice_number AS invoice,
@@ -1290,7 +1290,7 @@ router.get(
             i.updated_at DESC
 
           LIMIT 5
-        `, [organisationId]).map((row) => {
+        `, [organisationId])).map((row) => {
           let status = "Processing";
 
           if (
