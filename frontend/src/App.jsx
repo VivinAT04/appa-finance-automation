@@ -23,6 +23,8 @@ import {
   Workflow,
   Upload,
   Plus,
+  Menu,
+  X,
 } from "lucide-react";
 
 import appaLogo from "./assets/appa-logo.png";
@@ -95,6 +97,11 @@ function App() {
   const [
     workspaceOpen,
     setWorkspaceOpen,
+  ] = useState(false);
+
+  const [
+    mobileSidebarOpen,
+    setMobileSidebarOpen,
   ] = useState(false);
 
   const [
@@ -201,6 +208,38 @@ function App() {
       );
     };
   }, [workspaceOpen]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) {
+      return undefined;
+    }
+
+    function handleMobileEscape(event) {
+      if (event.key === "Escape") {
+        setMobileSidebarOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "keydown",
+      handleMobileEscape
+    );
+
+    document.body.classList.add(
+      "appa-mobile-nav-open"
+    );
+
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleMobileEscape
+      );
+
+      document.body.classList.remove(
+        "appa-mobile-nav-open"
+      );
+    };
+  }, [mobileSidebarOpen]);
 
   useEffect(() => {
     return () => {
@@ -398,6 +437,7 @@ function App() {
 
     setWorkspaceTransitioning(true);
     setWorkspaceOpen(false);
+    setMobileSidebarOpen(false);
 
     setStoredOrganisationId(
       organisationId
@@ -500,6 +540,12 @@ function App() {
 
   const [active, setActive] = useState("Dashboard");
 
+  function handleNavigation(name) {
+    setActive(name);
+    setMobileSidebarOpen(false);
+    setWorkspaceOpen(false);
+  }
+
   const [dashboard, setDashboard] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState("");
@@ -577,8 +623,27 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div
+      className={`app-shell ${
+        mobileSidebarOpen
+          ? "mobile-sidebar-open"
+          : ""
+      }`}
+    >
+      <button
+        type="button"
+        className="mobile-sidebar-backdrop"
+        aria-label="Close navigation"
+        tabIndex={mobileSidebarOpen ? 0 : -1}
+        onClick={() =>
+          setMobileSidebarOpen(false)
+        }
+      />
+
+      <aside
+        className="sidebar"
+        aria-label="Primary navigation"
+      >
         <div className="brand">
           <div className="brand-logo">
             <img src={appaLogo} alt="APPA Finance" />
@@ -588,6 +653,17 @@ function App() {
             <div className="brand-name">APPA</div>
             <div className="brand-subtitle">Finance Automation</div>
           </div>
+
+          <button
+            type="button"
+            className="mobile-sidebar-close"
+            aria-label="Close navigation"
+            onClick={() =>
+              setMobileSidebarOpen(false)
+            }
+          >
+            <X size={19} />
+          </button>
         </div>
 
         <div className="workspace">
@@ -758,7 +834,7 @@ function App() {
                 className={`nav-item ${
                   active === item.name ? "nav-item-active" : ""
                 }`}
-                onClick={() => setActive(item.name)}
+                onClick={() => handleNavigation(item.name)}
               >
                 <Icon size={18} strokeWidth={1.8} />
 
@@ -782,7 +858,7 @@ function App() {
                 className={`nav-item ${
                   active === item.name ? "nav-item-active" : ""
                 }`}
-                onClick={() => setActive(item.name)}
+                onClick={() => handleNavigation(item.name)}
               >
                 <Icon size={18} strokeWidth={1.8} />
                 <span>{item.name}</span>
@@ -796,7 +872,7 @@ function App() {
             className={`nav-item ${
               active === "Settings" ? "nav-item-active" : ""
             }`}
-            onClick={() => setActive("Settings")}
+            onClick={() => handleNavigation("Settings")}
           >
             <Settings size={18} strokeWidth={1.8} />
             <span>Settings</span>
@@ -832,6 +908,28 @@ function App() {
 
       <main className="main">
         <header className="topbar">
+          <button
+            type="button"
+            className="mobile-menu-button"
+            aria-label="Open navigation"
+            aria-expanded={mobileSidebarOpen}
+            onClick={() =>
+              setMobileSidebarOpen(true)
+            }
+          >
+            <Menu size={20} />
+          </button>
+
+          <div className="mobile-topbar-brand">
+            <img
+              src={appaLogo}
+              alt=""
+              aria-hidden="true"
+            />
+
+            <span>APPA</span>
+          </div>
+
           <div className="search">
             <Search size={18} />
 
