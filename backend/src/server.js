@@ -23,12 +23,38 @@ const app = express();
 
 const PORT = Number(process.env.PORT || 4000);
 
+const configuredOrigins = String(
+  process.env.CORS_ORIGINS || ""
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  ...configuredOrigins,
+]);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ],
+    origin(origin, callback) {
+      // Requests without an Origin header include
+      // server-to-server clients such as UiPath.
+      if (
+        !origin ||
+        allowedOrigins.has(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(
+        new Error(
+          `Origin ${origin} is not allowed by APPA CORS policy.`
+        )
+      );
+    },
+    credentials: true,
   })
 );
 
@@ -94,22 +120,40 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-async function startServer() {
+async function initialiseApplication() {
   await ensureDevelopmentAdmin();
-
-  app.listen(PORT, () => {
-    console.log("");
-    console.log("========================================");
-    console.log(" APPA FINANCE BACKEND");
-    console.log("========================================");
-    console.log(`API:    http://localhost:${PORT}`);
-    console.log(`Health: http://localhost:${PORT}/api/health`);
-    console.log(`Auth:   http://localhost:${PORT}/api/auth/login`);
-    console.log("========================================");
-  });
 }
 
-startServer().catch((error) => {
-  console.error("APPA backend startup failed:", error);
-  process.exit(1);
-});
+if (require.main === module) {
+  initialiseApplication()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log("");
+        console.log("========================================");
+        console.log(" APPA FINANCE BACKEND");
+        console.log("========================================");
+        console.log(
+          `API:    http://localhost:${PORT}`
+        );
+        console.log(
+          `Health: http://localhost:${PORT}/api/health`
+        );
+        console.log(
+          `Auth:   http://localhost:${PORT}/api/auth/login`
+        );
+        console.log("========================================");
+      });
+    })
+    .catch((error) => {
+      console.error(
+        "APPA backend startup failed:",
+        error
+      );
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  app,
+  initialiseApplication,
+};
