@@ -7,12 +7,15 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.23.0"
   },
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js"
+    "check": "node --check src/server.js",
+    "db:postgres:schema": "node scripts/createPostgresSchema.js",
+    "db:postgres:migrate": "node scripts/migrateSqliteToPostgres.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
