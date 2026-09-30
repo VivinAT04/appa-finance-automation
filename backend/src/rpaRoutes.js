@@ -2,49 +2,16 @@ const express =
   require("express");
 
 const {
-  randomUUID,
-} = require("crypto");
-
-const db =
-  require("./database");
+  QUEUE_NAME,
+  listQueueCandidates,
+  buildQueueTransaction,
+  recordRobotResult,
+} = require(
+  "./rpaTransactionService"
+);
 
 const router =
   express.Router();
-
-async function createAudit(
-  organisationId,
-  action,
-  entityType,
-  entityId,
-  description
-) {
-  await db.execute(
-    `
-      INSERT INTO audit_logs (
-        id,
-        action,
-        entity_type,
-        entity_id,
-        description,
-        created_at,
-        organisation_id
-      )
-      VALUES (
-        $1, $2, $3, $4,
-        $5, $6, $7
-      )
-    `,
-    [
-      randomUUID(),
-      action,
-      entityType,
-      entityId,
-      description,
-      new Date().toISOString(),
-      organisationId,
-    ]
-  );
-}
 
 router.get(
   "/health",
@@ -57,6 +24,7 @@ router.get(
         req.rpaRobot.name,
       organisation:
         req.organisation,
+      queue: QUEUE_NAME,
       status: "ready",
     });
   }
@@ -66,76 +34,53 @@ router.get(
   "/work-items",
   async (req, res, next) => {
     try {
-      const organisationId =
-        req.organisation.id;
-
       const workItems =
-        await db.many(
-          `
-            SELECT
-              i.id AS "invoiceId",
-              i.invoice_number AS "invoiceNumber",
-              i.supplier_name AS "supplierName",
-              i.purchase_order_number AS "purchaseOrderNumber",
-              i.currency,
-              i.total_amount AS "totalAmount",
-              i.extraction_confidence AS "extractionConfidence",
-              i.validation_status AS "validationStatus",
-
-              COALESCE(
-                m.match_status,
-                'Not Processed'
-              ) AS "matchStatus"
-
-            FROM invoices i
-
-            INNER JOIN documents d
-              ON d.id =
-                i.document_id
-
-            LEFT JOIN invoice_matches m
-              ON m.invoice_id =
-                i.id
-
-            WHERE
-              d.organisation_id = $1
-
-              AND
-                i.validation_status =
-                  'Validated'
-
-              AND (
-                m.id IS NULL
-                OR
-                  m.match_status <>
-                    'Matched'
-              )
-
-            ORDER BY
-              i.created_at
-          `,
-          [organisationId]
+        await listQueueCandidates(
+          req.organisation.id
         );
 
-      res.json({
+      return res.json({
         success: true,
-
-        /*
-         * This is the APPA API work-item
-         * feed. A later UiPath integration
-         * will place these transactions into
-         * the real Orchestrator Queue.
-         */
-        queue:
-          "APPA-INVOICE-MATCHING",
-
+        queue: QUEUE_NAME,
         robot:
           req.rpaRobot.name,
-
+        count:
+          workItems.length,
         workItems,
       });
     } catch (error) {
-      next(error);
+      return next(error);
+    }
+  }
+);
+
+router.get(
+  "/work-items/:invoiceId",
+  async (req, res, next) => {
+    try {
+      const transaction =
+        await buildQueueTransaction(
+          req.organisation.id,
+          req.params.invoiceId
+        );
+
+      if (!transaction) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message:
+              "Invoice transaction not found.",
+          });
+      }
+
+      return res.json({
+        success: true,
+        queue: QUEUE_NAME,
+        transaction,
+      });
+    } catch (error) {
+      return next(error);
     }
   }
 );
@@ -144,22 +89,15 @@ router.post(
   "/results",
   async (req, res, next) => {
     try {
-      const organisationId =
-        req.organisation.id;
-
       const {
         invoiceId,
         status,
         message = "",
+        queueItemKey = null,
+        exceptionType = null,
       } = req.body || {};
 
-      const robotName =
-        req.rpaRobot.name;
-
-      if (
-        !invoiceId ||
-        !status
-      ) {
+      if (!invoiceId || !status) {
         return res
           .status(400)
           .json({
@@ -169,64 +107,52 @@ router.post(
           });
       }
 
-      const invoice =
-        await db.one(
-          `
-            SELECT
-              i.id,
-              i.invoice_number AS "invoiceNumber"
+      const received =
+        await recordRobotResult({
+          organisationId:
+            req.organisation.id,
 
-            FROM invoices i
+          robotName:
+            req.rpaRobot.name,
 
-            INNER JOIN documents d
-              ON d.id =
-                i.document_id
+          invoiceId,
+          status,
+          message,
+          queueItemKey,
+          exceptionType,
+        });
 
-            WHERE
-              i.id = $1
-              AND
-                d.organisation_id = $2
-          `,
-          [
-            invoiceId,
-            organisationId,
-          ]
-        );
-
-      if (!invoice) {
+      return res.json({
+        success: true,
+        received,
+      });
+    } catch (error) {
+      if (
+        error.code ===
+        "INVOICE_NOT_FOUND"
+      ) {
         return res
           .status(404)
           .json({
             success: false,
             message:
-              "Invoice not found.",
+              error.message,
           });
       }
 
-      await createAudit(
-        organisationId,
-        "RPA_RESULT_RECEIVED",
-        "invoice",
-        invoiceId,
-        `${robotName}: ${status}${
-          message
-            ? ` - ${message}`
-            : ""
-        }`
-      );
+      if (
+        error.code ===
+        "INVALID_RPA_STATUS"
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              error.message,
+          });
+      }
 
-      return res.json({
-        success: true,
-        received: {
-          invoiceId,
-          invoiceNumber:
-            invoice.invoiceNumber,
-          robotName,
-          status,
-          message,
-        },
-      });
-    } catch (error) {
       return next(error);
     }
   }
