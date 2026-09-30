@@ -6181,3 +6181,215 @@ input:-webkit-autofill {
     display: none;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15C — RESPONSIVE DOCUMENT OPERATIONS
+   ============================================================ */
+
+.documents-module,
+.documents-layout,
+.document-list-panel,
+.upload-panel,
+.document-table-wrap,
+.document-toolbar,
+.document-search,
+.upload-form {
+  min-width: 0;
+}
+
+.document-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.document-table {
+  width: 100%;
+}
+
+.document-name-cell > div:last-child {
+  min-width: 0;
+}
+
+.document-name-cell strong,
+.document-name-cell span {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .documents-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(280px, 0.42fr);
+    gap: 18px;
+  }
+
+  .document-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .document-table {
+    min-width: 760px;
+  }
+}
+
+@media (max-width: 960px) {
+  .documents-layout {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .document-list-panel,
+  .upload-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .upload-panel {
+    order: 2;
+  }
+
+  .document-toolbar {
+    gap: 12px;
+  }
+
+  .document-search {
+    flex: 1 1 280px;
+    width: auto;
+    max-width: none;
+  }
+
+  .document-table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 720px) {
+  .document-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .document-summary-card {
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .document-summary-card strong {
+    font-size: clamp(24px, 8vw, 34px);
+  }
+
+  .document-summary-card span,
+  .document-summary-card small {
+    overflow-wrap: anywhere;
+  }
+
+  .document-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .document-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .document-search {
+    width: 100%;
+    flex-basis: auto;
+    box-sizing: border-box;
+  }
+
+  .document-search input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .refresh-button {
+    min-height: 44px;
+  }
+
+  .document-table-wrap {
+    overflow-x: auto;
+  }
+
+  .document-table {
+    min-width: 680px;
+  }
+
+  .document-table th,
+  .document-table td {
+    white-space: nowrap;
+  }
+
+  .document-name-cell {
+    min-width: 220px;
+  }
+
+  .document-name-cell strong,
+  .document-name-cell span {
+    white-space: normal;
+  }
+
+  .upload-form {
+    width: 100%;
+  }
+
+  .upload-form select,
+  .upload-form input {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .upload-dropzone {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 150px;
+    padding: 22px 16px;
+  }
+
+  .upload-dropzone strong,
+  .upload-dropzone span,
+  .upload-note {
+    overflow-wrap: anywhere;
+  }
+
+  .upload-submit {
+    width: 100%;
+    min-height: 46px;
+    justify-content: center;
+  }
+
+  .clear-file {
+    min-height: 42px;
+  }
+
+  .document-empty {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .document-summary-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .document-summary-card {
+    padding: 15px;
+  }
+
+  .document-table {
+    min-width: 640px;
+  }
+
+  .upload-dropzone {
+    min-height: 140px;
+  }
+}

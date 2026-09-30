@@ -790,3 +790,262 @@
     transition: none !important;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15C — RESPONSIVE INVOICE OPERATIONS
+   ============================================================ */
+
+.invoice-ops-panel,
+.invoice-summary-grid,
+.invoice-search-row,
+.invoice-search,
+.invoice-table-wrapper,
+.invoice-workspace-grid,
+.invoice-workspace-main,
+.invoice-workspace-side,
+.invoice-detail-toolbar,
+.invoice-detail-hero,
+.invoice-information-grid,
+.invoice-check-grid,
+.invoice-lines-wrapper,
+.invoice-section-card,
+.invoice-detail-field,
+.invoice-match-overview {
+  min-width: 0;
+}
+
+.invoice-table-wrapper,
+.invoice-lines-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.invoice-table,
+.invoice-lines-table {
+  width: 100%;
+}
+
+.invoice-table-primary,
+.invoice-detail-field,
+.invoice-event,
+.invoice-match-overview {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .invoice-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .invoice-workspace-grid {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(270px, 0.42fr);
+    gap: 18px;
+  }
+
+  .invoice-table {
+    min-width: 820px;
+  }
+
+  .invoice-lines-table {
+    min-width: 700px;
+  }
+}
+
+@media (max-width: 960px) {
+  .invoice-workspace-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .invoice-workspace-main,
+  .invoice-workspace-side {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .invoice-information-grid,
+  .invoice-check-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .invoice-detail-toolbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .invoice-detail-actions {
+    flex-wrap: wrap;
+  }
+
+  .invoice-table {
+    min-width: 780px;
+  }
+}
+
+@media (max-width: 720px) {
+  .invoice-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .invoice-search-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+  }
+
+  .invoice-search {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+  }
+
+  .invoice-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .invoice-search-row > span {
+    align-self: flex-start;
+  }
+
+  .invoice-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .invoice-table {
+    min-width: 740px;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    white-space: nowrap;
+  }
+
+  .invoice-table-primary {
+    min-width: 150px;
+    white-space: normal;
+  }
+
+  .invoice-detail-toolbar {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .invoice-back-button {
+    min-height: 44px;
+  }
+
+  .invoice-detail-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .invoice-detail-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .invoice-detail-hero {
+    padding: 18px;
+  }
+
+  .invoice-title-row {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .invoice-hero-total {
+    overflow-wrap: anywhere;
+  }
+
+  .invoice-information-grid,
+  .invoice-check-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .invoice-detail-field,
+  .invoice-section-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .invoice-lines-wrapper {
+    overflow-x: auto;
+  }
+
+  .invoice-lines-table {
+    min-width: 660px;
+  }
+
+  .invoice-lines-table th,
+  .invoice-lines-table td {
+    white-space: nowrap;
+  }
+
+  .invoice-totals {
+    width: 100%;
+    max-width: none;
+  }
+
+  .invoice-event-top {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .invoice-empty {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .invoice-summary-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .invoice-detail-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .invoice-detail-hero {
+    padding: 16px;
+  }
+
+  .invoice-title-row {
+    flex-direction: column;
+  }
+
+  .invoice-hero-total {
+    width: 100%;
+  }
+
+  .invoice-table {
+    min-width: 700px;
+  }
+
+  .invoice-lines-table {
+    min-width: 620px;
+  }
+
+  .invoice-grand-total {
+    overflow-wrap: anywhere;
+  }
+}

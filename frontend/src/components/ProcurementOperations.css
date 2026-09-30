@@ -741,3 +741,277 @@
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15C — RESPONSIVE PROCUREMENT + SUPPLIERS
+   ============================================================ */
+
+.procurement-panel,
+.procurement-header,
+.procurement-metric-grid,
+.procurement-toolbar,
+.procurement-search,
+.procurement-table-wrapper,
+.procurement-detail-toolbar,
+.procurement-detail-hero,
+.procurement-detail-layout,
+.procurement-side-column,
+.procurement-summary-grid,
+.procurement-card,
+.procurement-control-list,
+.procurement-totals,
+.supplier-grid,
+.supplier-card,
+.supplier-card-top,
+.supplier-identity,
+.supplier-detail-list {
+  min-width: 0;
+}
+
+.procurement-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.procurement-table {
+  width: 100%;
+}
+
+.procurement-primary-cell,
+.procurement-summary-field,
+.supplier-identity,
+.supplier-detail-list {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .procurement-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .procurement-three-metrics {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+
+  .procurement-detail-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(270px, 0.4fr);
+    gap: 18px;
+  }
+
+  .supplier-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .procurement-table {
+    min-width: 820px;
+  }
+
+  .procurement-line-table {
+    min-width: 700px;
+  }
+}
+
+@media (max-width: 960px) {
+  .procurement-detail-layout {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .procurement-side-column {
+    width: 100%;
+  }
+
+  .procurement-toolbar {
+    gap: 12px;
+  }
+
+  .procurement-search {
+    flex: 1 1 300px;
+    width: auto;
+    max-width: none;
+  }
+
+  .procurement-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .procurement-table {
+    min-width: 780px;
+  }
+}
+
+@media (max-width: 720px) {
+  .procurement-header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .procurement-metric-grid,
+  .procurement-three-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .procurement-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .procurement-search {
+    width: 100%;
+    flex-basis: auto;
+    box-sizing: border-box;
+  }
+
+  .procurement-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .procurement-result-count {
+    align-self: flex-start;
+  }
+
+  .procurement-secondary-button {
+    min-height: 44px;
+  }
+
+  .procurement-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .procurement-table {
+    min-width: 740px;
+  }
+
+  .procurement-table th,
+  .procurement-table td {
+    white-space: nowrap;
+  }
+
+  .procurement-primary-cell {
+    min-width: 160px;
+    white-space: normal;
+  }
+
+  .procurement-detail-toolbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .procurement-back-button {
+    min-height: 44px;
+  }
+
+  .procurement-detail-toolbar
+  .procurement-secondary-button {
+    min-height: 44px;
+  }
+
+  .procurement-detail-hero {
+    padding: 18px;
+  }
+
+  .procurement-title-line {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .procurement-hero-total {
+    overflow-wrap: anywhere;
+  }
+
+  .procurement-summary-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .procurement-card,
+  .procurement-dark-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .procurement-line-table {
+    min-width: 640px;
+  }
+
+  .procurement-totals {
+    width: 100%;
+    max-width: none;
+  }
+
+  .supplier-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .supplier-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .supplier-card-top {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .supplier-identity {
+    flex: 1;
+  }
+
+  .supplier-detail-list {
+    width: 100%;
+  }
+
+  .procurement-large-empty {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .procurement-metric-grid,
+  .procurement-three-metrics {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .procurement-detail-hero {
+    padding: 16px;
+  }
+
+  .procurement-title-line {
+    flex-direction: column;
+  }
+
+  .procurement-hero-total {
+    width: 100%;
+  }
+
+  .procurement-table {
+    min-width: 700px;
+  }
+
+  .procurement-line-table {
+    min-width: 600px;
+  }
+
+  .supplier-card {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+}
