@@ -316,34 +316,31 @@ function App() {
 
       setStoredAuthToken(result.token);
 
-      const loginOrganisations =
-        result.user?.organisations || [];
-
-      const storedOrganisationId =
-        getStoredOrganisationId();
-
-      const storedOrganisationValid =
-        loginOrganisations.some(
-          (organisation) =>
-            organisation.id ===
-            storedOrganisationId
-        );
+      /*
+       * The login response establishes authentication.
+       * /auth/me is the authoritative source for the user's
+       * active organisation memberships.
+       *
+       * getCurrentUser() also validates the previously stored
+       * organisation and selects the first available workspace
+       * when necessary.
+       */
+      const user = await getCurrentUser();
 
       const nextOrganisationId =
-        storedOrganisationValid
-          ? storedOrganisationId
-          : loginOrganisations[0]?.id ||
-            null;
+        getStoredOrganisationId();
 
-      setStoredOrganisationId(
-        nextOrganisationId
-      );
+      if (!nextOrganisationId) {
+        throw new Error(
+          "No active organisation is available for this account."
+        );
+      }
 
       setSelectedOrganisationId(
         nextOrganisationId
       );
 
-      setAuthUser(result.user);
+      setAuthUser(user);
     } catch (error) {
       setStoredAuthToken(null);
 
