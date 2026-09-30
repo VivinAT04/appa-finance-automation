@@ -101,10 +101,16 @@ function getPurchaseOrder(
   }
 
   return db.prepare(`
-    SELECT *
-    FROM purchase_orders
-    WHERE po_number = ?
-      AND organisation_id = ?
+    SELECT
+      po.*,
+      s.name AS supplier_name,
+      s.supplier_code AS supplier_code
+    FROM purchase_orders po
+    INNER JOIN suppliers s
+      ON s.id = po.supplier_id
+      AND s.organisation_id = po.organisation_id
+    WHERE po.po_number = ?
+      AND po.organisation_id = ?
   `).get(
     poNumber,
     organisationId
