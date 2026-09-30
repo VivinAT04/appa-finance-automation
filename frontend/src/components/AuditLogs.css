@@ -301,3 +301,137 @@
     width: 100%;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15D — RESPONSIVE AUDIT LOGS
+   ============================================================ */
+
+.audit-page,
+.audit-heading,
+.audit-metrics,
+.audit-panel,
+.audit-toolbar,
+.audit-search,
+.audit-table-wrap,
+.audit-event,
+.audit-entity {
+  min-width: 0;
+}
+
+.audit-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.audit-table {
+  width: 100%;
+}
+
+.audit-description,
+.audit-event,
+.audit-entity {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .audit-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .audit-table {
+    min-width: 820px;
+  }
+}
+
+@media (max-width: 960px) {
+  .audit-heading {
+    gap: 14px;
+  }
+
+  .audit-toolbar {
+    gap: 12px;
+  }
+
+  .audit-search {
+    flex: 1 1 280px;
+    width: auto;
+    max-width: none;
+  }
+
+  .audit-table {
+    min-width: 780px;
+  }
+}
+
+@media (max-width: 720px) {
+  .audit-heading {
+    align-items: flex-start;
+  }
+
+  .audit-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .audit-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .audit-search {
+    width: 100%;
+    flex-basis: auto;
+    box-sizing: border-box;
+  }
+
+  .audit-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .audit-refresh {
+    min-height: 44px;
+  }
+
+  .audit-table-wrap {
+    overflow-x: auto;
+  }
+
+  .audit-table {
+    min-width: 740px;
+  }
+
+  .audit-table th,
+  .audit-table td {
+    white-space: nowrap;
+  }
+
+  .audit-description,
+  .audit-event,
+  .audit-entity {
+    white-space: normal;
+    min-width: 150px;
+  }
+
+  .audit-state {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .audit-metrics {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .audit-table {
+    min-width: 700px;
+  }
+}

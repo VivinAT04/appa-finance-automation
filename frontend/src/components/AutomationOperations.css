@@ -795,3 +795,235 @@
     transition: none;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15D — RESPONSIVE AUTOMATION OPERATIONS
+   ============================================================ */
+
+.automation-panel,
+.automation-header,
+.automation-header-actions,
+.automation-metrics,
+.automation-layout,
+.automation-main-column,
+.automation-side-column,
+.automation-card,
+.automation-run-card,
+.automation-run-summary,
+.automation-run-identity,
+.automation-run-stats,
+.automation-control-row,
+.automation-flow,
+.automation-contract-step,
+.automation-table-wrapper,
+.automation-truth-banner {
+  min-width: 0;
+}
+
+.automation-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.automation-table {
+  width: 100%;
+}
+
+.automation-primary-cell,
+.automation-run-description,
+.automation-run-detail,
+.automation-contract-note,
+.automation-truth-banner {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .automation-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .automation-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(280px, 0.42fr);
+    gap: 18px;
+  }
+
+  .automation-table {
+    min-width: 760px;
+  }
+}
+
+@media (max-width: 960px) {
+  .automation-layout {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .automation-main-column,
+  .automation-side-column {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .automation-header {
+    gap: 14px;
+  }
+
+  .automation-header-actions {
+    flex-wrap: wrap;
+  }
+
+  .automation-run-stats {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .automation-table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 720px) {
+  .automation-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .automation-header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .automation-header-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .automation-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .automation-card,
+  .automation-run-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .automation-card-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .automation-run-summary {
+    display: grid;
+    grid-template-columns:
+      auto minmax(0, 1fr);
+    gap: 10px 12px;
+    align-items: start;
+  }
+
+  .automation-run-identity {
+    min-width: 0;
+  }
+
+  .automation-run-summary > .status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .automation-run-stats {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .automation-control-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .automation-flow {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .automation-contract-step {
+    min-width: 0;
+  }
+
+  .automation-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .automation-table {
+    min-width: 680px;
+  }
+
+  .automation-table th,
+  .automation-table td {
+    white-space: nowrap;
+  }
+
+  .automation-primary-cell {
+    min-width: 160px;
+    white-space: normal;
+  }
+
+  .automation-truth-banner {
+    align-items: flex-start;
+  }
+
+  .automation-primary-button,
+  .automation-secondary-button {
+    min-height: 44px;
+  }
+
+  .automation-empty,
+  .automation-loading {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .automation-header-actions,
+  .automation-metrics,
+  .automation-run-stats {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .automation-run-summary {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .automation-run-summary > .status {
+    grid-column: 1;
+  }
+
+  .automation-run-icon {
+    margin-bottom: 2px;
+  }
+
+  .automation-control-row {
+    flex-direction: column;
+  }
+
+  .automation-table {
+    min-width: 640px;
+  }
+}

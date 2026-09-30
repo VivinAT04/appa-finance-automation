@@ -735,3 +735,251 @@
     width: 100%;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15D — RESPONSIVE APPROVALS + EXCEPTIONS
+   ============================================================ */
+
+.finance-panel,
+.finance-header,
+.finance-metric-grid,
+.finance-toolbar,
+.finance-tabs,
+.finance-search,
+.finance-table-wrapper,
+.finance-row-actions,
+.finance-exception-grid,
+.finance-exception-card,
+.finance-exception-top,
+.finance-exception-info,
+.finance-resolution-box,
+.finance-modal,
+.finance-modal-context,
+.finance-modal-actions {
+  min-width: 0;
+}
+
+.finance-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.finance-table {
+  width: 100%;
+}
+
+.finance-primary-cell,
+.finance-match-cell,
+.finance-exception-title,
+.finance-exception-description,
+.finance-exception-info,
+.finance-resolution-box,
+.finance-modal-context {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .finance-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-table {
+    min-width: 860px;
+  }
+
+  .finance-exception-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .finance-header {
+    gap: 14px;
+  }
+
+  .finance-toolbar {
+    gap: 12px;
+  }
+
+  .finance-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .finance-tabs button {
+    flex: 0 0 auto;
+    min-height: 42px;
+  }
+
+  .finance-search {
+    flex: 1 1 280px;
+    width: auto;
+    max-width: none;
+  }
+
+  .finance-table {
+    min-width: 820px;
+  }
+
+  .finance-modal {
+    width: min(560px, calc(100vw - 36px));
+    max-height: calc(100dvh - 36px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .finance-header {
+    align-items: flex-start;
+  }
+
+  .finance-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .finance-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .finance-tabs {
+    width: 100%;
+  }
+
+  .finance-search {
+    width: 100%;
+    flex-basis: auto;
+    box-sizing: border-box;
+  }
+
+  .finance-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .finance-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .finance-table {
+    min-width: 780px;
+  }
+
+  .finance-table th,
+  .finance-table td {
+    white-space: nowrap;
+  }
+
+  .finance-primary-cell,
+  .finance-match-cell {
+    white-space: normal;
+    min-width: 150px;
+  }
+
+  .finance-row-actions {
+    flex-wrap: wrap;
+    min-width: 160px;
+  }
+
+  .finance-row-actions button,
+  .finance-approve-button,
+  .finance-reject-button {
+    min-height: 40px;
+  }
+
+  .finance-exception-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .finance-exception-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .finance-exception-top {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .finance-resolution-box {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .finance-modal-backdrop {
+    padding: 14px;
+    align-items: flex-end;
+  }
+
+  .finance-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 28px);
+    border-radius: 18px 18px 12px 12px;
+    overflow-y: auto;
+  }
+
+  .finance-modal textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .finance-modal-actions {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .finance-modal-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .finance-empty {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .finance-metric-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .finance-table {
+    min-width: 740px;
+  }
+
+  .finance-exception-top {
+    flex-direction: column;
+  }
+
+  .finance-modal-backdrop {
+    padding: 8px;
+  }
+
+  .finance-modal {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .finance-modal-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+}

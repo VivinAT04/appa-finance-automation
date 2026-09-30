@@ -745,3 +745,149 @@
     transition: none;
   }
 }
+
+/* ============================================================
+   APPA BLOCK 15D — RESPONSIVE REPORTING OPERATIONS
+   ============================================================ */
+
+.reporting-panel,
+.reporting-header,
+.reporting-metrics,
+.reporting-grid,
+.reporting-card,
+.reporting-wide,
+.reporting-card-heading,
+.reporting-list,
+.reporting-list-row,
+.reporting-table-wrapper,
+.reporting-automation-summary,
+.reporting-note {
+  min-width: 0;
+}
+
+.reporting-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reporting-table {
+  width: 100%;
+}
+
+.reporting-list-row,
+.reporting-note,
+.reporting-automation-summary {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .reporting-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .reporting-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .reporting-wide {
+    grid-column: 1 / -1;
+  }
+
+  .reporting-table {
+    min-width: 760px;
+  }
+}
+
+@media (max-width: 960px) {
+  .reporting-header {
+    gap: 14px;
+  }
+
+  .reporting-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .reporting-wide {
+    grid-column: auto;
+  }
+
+  .reporting-table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 720px) {
+  .reporting-header {
+    align-items: flex-start;
+  }
+
+  .reporting-refresh {
+    min-height: 44px;
+  }
+
+  .reporting-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .reporting-card {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .reporting-card-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .reporting-list-row {
+    gap: 10px;
+  }
+
+  .reporting-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .reporting-table {
+    min-width: 680px;
+  }
+
+  .reporting-table th,
+  .reporting-table td {
+    white-space: nowrap;
+  }
+
+  .reporting-automation-summary {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .reporting-note,
+  .reporting-empty {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reporting-metrics {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .reporting-table {
+    min-width: 640px;
+  }
+
+  .reporting-list-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
