@@ -36,9 +36,13 @@ function paymentTerms(value) {
 }
 
 export default function SupplierOperations({
-  rows = [],
+  rows: rawRows = [],
   onRefresh,
 }) {
+  const rows = useMemo(
+    () => (Array.isArray(rawRows) ? rawRows : []),
+    [rawRows]
+  );
   const [query, setQuery] =
     useState("");
 

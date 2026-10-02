@@ -65,12 +65,19 @@ function Status({ value }) {
 }
 
 export default function ApprovalOperations({
-  pending,
-  history,
+  pending: rawPending,
+  history: rawHistory,
   working,
   onRefresh,
   onDecision,
 }) {
+  const pending = Array.isArray(rawPending)
+    ? rawPending
+    : [];
+
+  const history = Array.isArray(rawHistory)
+    ? rawHistory
+    : [];
   const [query, setQuery] =
     useState("");
 

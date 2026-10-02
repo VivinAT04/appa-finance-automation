@@ -77,17 +77,29 @@ export default function ReportingOperations({
   loading = false,
   onRefresh,
 }) {
-  const invoices =
-    report?.invoiceSummary || [];
+  const invoices = Array.isArray(
+    report?.invoiceSummary
+  )
+    ? report.invoiceSummary
+    : [];
 
-  const matches =
-    report?.matchSummary || [];
+  const matches = Array.isArray(
+    report?.matchSummary
+  )
+    ? report.matchSummary
+    : [];
 
-  const exceptions =
-    report?.exceptionSummary || [];
+  const exceptions = Array.isArray(
+    report?.exceptionSummary
+  )
+    ? report.exceptionSummary
+    : [];
 
-  const automation =
-    report?.automationSummary || [];
+  const automation = Array.isArray(
+    report?.automationSummary
+  )
+    ? report.automationSummary
+    : [];
 
   const invoiceCount =
     invoices.reduce(

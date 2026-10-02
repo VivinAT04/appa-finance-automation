@@ -103,9 +103,13 @@ function SummaryField({
 }
 
 export default function PurchaseOrderOperations({
-  rows = [],
+  rows: rawRows = [],
   onRefresh,
 }) {
+  const rows = useMemo(
+    () => (Array.isArray(rawRows) ? rawRows : []),
+    [rawRows]
+  );
   const [query, setQuery] =
     useState("");
 

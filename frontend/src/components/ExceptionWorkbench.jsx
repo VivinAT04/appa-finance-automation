@@ -48,11 +48,15 @@ function Severity({ value }) {
 }
 
 export default function ExceptionWorkbench({
-  rows,
+  rows: rawRows,
   working,
   onRefresh,
   onResolve,
 }) {
+  const rows = useMemo(
+    () => (Array.isArray(rawRows) ? rawRows : []),
+    [rawRows]
+  );
   const [query, setQuery] =
     useState("");
 

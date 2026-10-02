@@ -11,6 +11,10 @@ const AUTH_TOKEN_KEY = "appa_auth_token";
 const ORGANISATION_KEY =
   "appa_organisation_id";
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 export function getStoredOrganisationId() {
   return window.localStorage.getItem(
     ORGANISATION_KEY
@@ -162,7 +166,7 @@ export async function logoutUser() {
 
 export async function getDocuments() {
   const response = await api.get("/documents");
-  return response.data.documents;
+  return asArray(response.data.documents);
 }
 
 export async function uploadDocument(file, documentType) {
@@ -186,7 +190,7 @@ export function getDocumentFileUrl(id) {
 
 export async function getInvoices() {
   const response = await api.get("/invoices");
-  return response.data.invoices;
+  return asArray(response.data.invoices);
 }
 
 export async function getInvoice(id) {
@@ -212,7 +216,7 @@ export async function processInvoice(documentId) {
 
 export async function getAuditLogs() {
   const response = await api.get("/audit");
-  return response.data.logs;
+  return asArray(response.data.logs);
 }
 
 
@@ -223,7 +227,7 @@ export async function getSuppliers() {
     "/enterprise/suppliers"
   );
 
-  return response.data.suppliers;
+  return asArray(response.data.suppliers);
 }
 
 export async function getPurchaseOrders() {
@@ -231,7 +235,7 @@ export async function getPurchaseOrders() {
     "/enterprise/purchase-orders"
   );
 
-  return response.data.purchaseOrders;
+  return asArray(response.data.purchaseOrders);
 }
 
 export async function getPurchaseOrder(id) {
@@ -267,7 +271,7 @@ export async function getApprovals() {
     "/enterprise/approvals"
   );
 
-  return response.data.approvals;
+  return asArray(response.data.approvals);
 }
 
 export async function submitApproval(
@@ -292,7 +296,7 @@ export async function getExceptions() {
     "/enterprise/exceptions"
   );
 
-  return response.data.exceptions;
+  return asArray(response.data.exceptions);
 }
 
 export async function resolveException(
@@ -314,7 +318,7 @@ export async function getAutomationRuns() {
     "/enterprise/automation-runs"
   );
 
-  return response.data.runs;
+  return asArray(response.data.runs);
 }
 
 export async function runAPCycle(
@@ -419,7 +423,7 @@ export async function getWorkflowScenarios() {
     "/enterprise/scenarios"
   );
 
-  return response.data.scenarios;
+  return asArray(response.data.scenarios);
 }
 
 export async function getWorkflowScenarioResults() {
@@ -455,7 +459,7 @@ export async function getPendingApprovals() {
     "/enterprise/approvals/pending"
   );
 
-  return response.data.pending;
+  return asArray(response.data.pending);
 }
 
 export async function getOperationsSummary() {
@@ -472,12 +476,12 @@ export async function getOperationsSummary() {
 
 export async function getUsers() {
   const response = await api.get("/users");
-  return response.data.users;
+  return asArray(response.data.users);
 }
 
 export async function getUserRoles() {
   const response = await api.get("/users/roles");
-  return response.data.roles;
+  return asArray(response.data.roles);
 }
 
 export async function createUser(payload) {
