@@ -20,7 +20,8 @@
     "test:legacy:users": "node -r dotenv/config test/userAdministrationIsolation.js",
     "test:readiness": "node test/releaseReadiness.js",
     "test:release": "npm run test:rpa && npm run test:readiness",
-    "test": "npm run test:release"
+    "test": "npm run test:release",
+    "test:unattended": "node test/unattendedAutomationEvidence.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
