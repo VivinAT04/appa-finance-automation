@@ -257,6 +257,39 @@ function parseInvoiceText(rawText) {
 }
 
 async function extractPdfText(filePath) {
+  /*
+   * pdfjs-dist expects browser-style geometry globals.
+   * In Node/Vercel they are provided by @napi-rs/canvas.
+   */
+  if (
+    typeof globalThis.DOMMatrix === "undefined" ||
+    typeof globalThis.ImageData === "undefined" ||
+    typeof globalThis.Path2D === "undefined"
+  ) {
+    const canvas = require("@napi-rs/canvas");
+
+    if (
+      typeof globalThis.DOMMatrix === "undefined" &&
+      canvas.DOMMatrix
+    ) {
+      globalThis.DOMMatrix = canvas.DOMMatrix;
+    }
+
+    if (
+      typeof globalThis.ImageData === "undefined" &&
+      canvas.ImageData
+    ) {
+      globalThis.ImageData = canvas.ImageData;
+    }
+
+    if (
+      typeof globalThis.Path2D === "undefined" &&
+      canvas.Path2D
+    ) {
+      globalThis.Path2D = canvas.Path2D;
+    }
+  }
+
   const pdfModule = require("pdf-parse");
 
   /*
