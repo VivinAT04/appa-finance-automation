@@ -3,7 +3,11 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": [
+        "node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs",
+        "node_modules/pdf-parse/dist/worker/pdf.worker.mjs"
+      ]
     }
   },
   "rewrites": [
