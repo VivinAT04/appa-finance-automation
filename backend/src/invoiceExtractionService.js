@@ -3,7 +3,12 @@ const path = require("path");
 const { randomUUID } = require("crypto");
 const db = require("./database");
 
-const uploadDir = path.join(__dirname, "..", "uploads");
+// Keep invoice extraction on the same storage path used by documentRoutes.
+// Vercel provides writable temporary storage only under /tmp.
+const uploadDir =
+  process.env.VERCEL
+    ? path.join("/tmp", "appa-finance-uploads")
+    : path.join(__dirname, "..", "uploads");
 
 function normalizeText(value) {
   return String(value || "")
