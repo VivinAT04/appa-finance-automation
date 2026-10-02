@@ -298,6 +298,28 @@ async function extractPdfText(filePath) {
     "pdfjs-dist/legacy/build/pdf.mjs"
   );
 
+  /*
+   * Ship the PDF.js worker with APPA itself so serverless
+   * deployment does not depend on tracing a worker from
+   * node_modules.
+   */
+  const { pathToFileURL } = require("url");
+
+  const bundledWorkerPath = path.join(
+    __dirname,
+    "pdfjs",
+    "pdf.worker.mjs"
+  );
+
+  if (!fs.existsSync(bundledWorkerPath)) {
+    throw new Error(
+      `Bundled PDF.js worker not found: ${bundledWorkerPath}`
+    );
+  }
+
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    pathToFileURL(bundledWorkerPath).href;
+
   const data = new Uint8Array(
     fs.readFileSync(filePath)
   );
