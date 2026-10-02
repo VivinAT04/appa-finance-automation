@@ -157,6 +157,11 @@ export default function InvoiceOperations({
   onRefresh,
   onMatch,
 }) {
+  const safeRows = useMemo(
+    () => (Array.isArray(rows) ? rows : []),
+    [rows]
+  );
+
   const [selectedId, setSelectedId] =
     useState(null);
 
@@ -186,10 +191,10 @@ export default function InvoiceOperations({
       query.trim().toLowerCase();
 
     if (!normalized) {
-      return rows;
+      return safeRows;
     }
 
-    return rows.filter((item) =>
+    return safeRows.filter((item) =>
       [
         item.invoiceNumber,
         item.supplierName,
@@ -204,7 +209,7 @@ export default function InvoiceOperations({
             .includes(normalized)
         )
     );
-  }, [rows, query]);
+  }, [safeRows, query]);
 
   async function loadDetail(id) {
     setSelectedId(id);
@@ -238,15 +243,25 @@ export default function InvoiceOperations({
       setInvoice(invoiceData);
       setMatch(matchData);
 
+      const safeExceptionData =
+        Array.isArray(exceptionData)
+          ? exceptionData
+          : [];
+
+      const safeApprovalData =
+        Array.isArray(approvalData)
+          ? approvalData
+          : [];
+
       setExceptions(
-        exceptionData.filter(
+        safeExceptionData.filter(
           (item) =>
             item.invoiceId === id
         )
       );
 
       setApprovals(
-        approvalData.filter(
+        safeApprovalData.filter(
           (item) =>
             item.invoiceId === id
         )
@@ -272,7 +287,7 @@ export default function InvoiceOperations({
   useEffect(() => {
     if (
       selectedId &&
-      !rows.some(
+      !safeRows.some(
         (item) =>
           item.id === selectedId
       )
@@ -283,7 +298,10 @@ export default function InvoiceOperations({
       setExceptions([]);
       setApprovals([]);
     }
-  }, [rows, selectedId]);
+  }, [
+    rows, selectedId,
+    safeRows,
+  ]);
 
   if (selectedId) {
     return (
@@ -949,14 +967,14 @@ export default function InvoiceOperations({
       <div className="invoice-list-summary">
         <article>
           <span>Total invoices</span>
-          <strong>{rows.length}</strong>
+          <strong>{safeRows.length}</strong>
         </article>
 
         <article>
           <span>Validated</span>
           <strong>
             {
-              rows.filter(
+              safeRows.filter(
                 (item) =>
                   item.validationStatus ===
                   "Validated"
@@ -969,7 +987,7 @@ export default function InvoiceOperations({
           <span>Invoice value</span>
           <strong>
             {money(
-              rows.reduce(
+              safeRows.reduce(
                 (sum, item) =>
                   sum +
                   Number(
@@ -977,7 +995,7 @@ export default function InvoiceOperations({
                   ),
                 0
               ),
-              rows[0]?.currency || "INR"
+              safeRows[0]?.currency || "INR"
             )}
           </strong>
         </article>
@@ -986,7 +1004,7 @@ export default function InvoiceOperations({
           <span>Missing PO</span>
           <strong>
             {
-              rows.filter(
+              safeRows.filter(
                 (item) =>
                   !item.purchaseOrderNumber
               ).length
