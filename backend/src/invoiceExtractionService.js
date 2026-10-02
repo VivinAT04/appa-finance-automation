@@ -190,12 +190,12 @@ function parseInvoiceText(rawText) {
 
     invoiceDate: capture(
       text,
-      /Invoice\s*Date\s*:\s*([^\n]+)/i
+      /Invoice\s*Date\s*:\s*(\d{4}-\d{2}-\d{2})/i
     ),
 
     dueDate: capture(
       text,
-      /Due\s*Date\s*:\s*([^\n]+)/i
+      /Due\s*Date\s*:\s*(\d{4}-\d{2}-\d{2})/i
     ),
 
     supplierName: supplierBlock,
