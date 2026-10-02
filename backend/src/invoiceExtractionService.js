@@ -258,9 +258,13 @@ function parseInvoiceText(rawText) {
 
 async function extractPdfText(filePath) {
   /*
-   * pdfjs-dist expects browser-style geometry globals.
-   * In Node/Vercel they are provided by @napi-rs/canvas.
+   * APPA only requires textual invoice extraction here.
+   *
+   * Use pdfjs-dist directly instead of pdf-parse so the Vercel
+   * function does not depend on pdf-parse's dynamically resolved
+   * pdf.worker.mjs file.
    */
+
   if (
     typeof globalThis.DOMMatrix === "undefined" ||
     typeof globalThis.ImageData === "undefined" ||
@@ -290,62 +294,59 @@ async function extractPdfText(filePath) {
     }
   }
 
-  const pdfModule = require("pdf-parse");
+  const pdfjs = await import(
+    "pdfjs-dist/legacy/build/pdf.mjs"
+  );
+
+  const data = new Uint8Array(
+    fs.readFileSync(filePath)
+  );
 
   /*
-    pdf-parse has had more than one CommonJS export shape.
-    Support both so this project is not tied to one minor release.
-  */
-  if (typeof pdfModule === "function") {
-    const result = await pdfModule(fs.readFileSync(filePath));
-    return result.text || "";
-  }
+   * disableWorker keeps this server-side text extraction inside
+   * the Vercel function rather than requiring a separate worker file.
+   */
+  const loadingTask = pdfjs.getDocument({
+    data,
+    disableWorker: true,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+  });
 
-  if (typeof pdfModule.default === "function") {
-    const result = await pdfModule.default(
-      fs.readFileSync(filePath)
-    );
-    return result.text || "";
-  }
+  const pdf = await loadingTask.promise;
 
-  if (pdfModule.PDFParse) {
-    /*
-     * pdf-parse 2.x uses PDF.js internally.
-     * Explicitly point PDF.js at the worker bundled with pdf-parse.
-     * This avoids worker-resolution failures in Node/Vercel.
-     */
-    const workerPath = path.resolve(
-      __dirname,
-      "../node_modules/pdf-parse/dist/worker/pdf.worker.mjs"
-    );
+  try {
+    const pages = [];
 
-    if (!fs.existsSync(workerPath)) {
-      throw new Error(
-        `pdf-parse worker not found: ${workerPath}`
-      );
-    }
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber += 1
+    ) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
 
-    pdfModule.PDFParse.setWorker(workerPath);
+      const text = content.items
+        .map((item) =>
+          typeof item.str === "string" ? item.str : ""
+        )
+        .filter(Boolean)
+        .join(" ");
 
-    const parser = new pdfModule.PDFParse({
-      data: fs.readFileSync(filePath),
-    });
+      pages.push(text);
 
-    try {
-      const result = await parser.getText();
-      return result?.text || "";
-    } finally {
-      if (typeof parser.destroy === "function") {
-        await parser.destroy();
+      if (typeof page.cleanup === "function") {
+        page.cleanup();
       }
     }
+
+    return pages.join("\n").trim();
+  } finally {
+    if (typeof pdf.destroy === "function") {
+      await pdf.destroy();
+    }
   }
-
-  throw new Error(
-    "Installed pdf-parse version exposes an unsupported API."
-  );
 }
-
 async function extractText(document) {
   const filePath = path.join(
     uploadDir,
