@@ -279,23 +279,23 @@ async function ensurePurchaseOrder(
         {
           description:
             "USB-C Docking Stations",
-          quantity: 4,
-          unitPrice: 4500,
-          lineTotal: 18000,
+          quantity: 2,
+          unitPrice: 125,
+          lineTotal: 250,
         },
         {
           description:
             "Wireless Keyboards",
-          quantity: 10,
-          unitPrice: 300,
-          lineTotal: 3000,
+          quantity: 3,
+          unitPrice: 45,
+          lineTotal: 135,
         },
         {
           description:
             "27-inch Office Monitors",
-          quantity: 5,
-          unitPrice: 400,
-          lineTotal: 2000,
+          quantity: 1,
+          unitPrice: 220,
+          lineTotal: 220,
         },
       ];
 
