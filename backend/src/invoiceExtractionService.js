@@ -309,6 +309,24 @@ async function extractPdfText(filePath) {
   }
 
   if (pdfModule.PDFParse) {
+    /*
+     * pdf-parse 2.x uses PDF.js internally.
+     * Explicitly point PDF.js at the worker bundled with pdf-parse.
+     * This avoids worker-resolution failures in Node/Vercel.
+     */
+    const workerPath = path.resolve(
+      __dirname,
+      "../node_modules/pdf-parse/dist/worker/pdf.worker.mjs"
+    );
+
+    if (!fs.existsSync(workerPath)) {
+      throw new Error(
+        `pdf-parse worker not found: ${workerPath}`
+      );
+    }
+
+    pdfModule.PDFParse.setWorker(workerPath);
+
     const parser = new pdfModule.PDFParse({
       data: fs.readFileSync(filePath),
     });
