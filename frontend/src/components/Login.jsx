@@ -643,6 +643,22 @@ export default function Login({
             <span>
               Restricted to authorised APPA
               Finance users.
+
+              <div className="mt-4 text-center text-xs text-slate-500">
+                <span className="font-medium text-slate-600">
+                  Demo Access
+                </span>
+                <span className="mx-2">·</span>
+                Email:
+                <span className="ml-1 font-medium text-slate-700">
+                  test@gmail.com
+                </span>
+                <span className="mx-2">·</span>
+                Password:
+                <span className="ml-1 font-medium text-slate-700">
+                  Testappa0812
+                </span>
+              </div>
             </span>
           </div>
         </div>
