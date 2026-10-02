@@ -1,16 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  BarChart3,
-  Bot,
   CheckCircle2,
-  FileCheck2,
-  Play,
   RefreshCw,
-  Settings2,
-  ShieldCheck,
-  ShoppingCart,
-  XCircle,
 } from "lucide-react";
 
 import {
@@ -26,7 +18,6 @@ import {
   matchInvoiceToPO,
   submitApproval,
   resolveException,
-  runAPCycle,
   updateSetting,
 } from "../api";
 
@@ -41,105 +32,10 @@ import SettingsOperations from "./SettingsOperations";
 
 import "./EnterpriseModule.css";
 
-function money(value, currency = "INR") {
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: currency || "INR",
-      maximumFractionDigits: 2,
-    }).format(Number(value || 0));
-  } catch {
-    return `${currency || "INR"} ${Number(value || 0).toFixed(2)}`;
-  }
-}
 
-function formatDate(value) {
-  if (!value) return "—";
 
-  const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
 
-  return date.toLocaleString();
-}
-
-function StatusBadge({ value }) {
-  const normalized = String(value || "").toLowerCase();
-
-  const positive = [
-    "validated",
-    "matched",
-    "approved",
-    "completed",
-    "resolved",
-    "active",
-  ].some((item) => normalized === item);
-
-  const danger = [
-    "rejected",
-    "failed",
-    "exception",
-    "open",
-  ].some((item) => normalized === item);
-
-  return (
-    <span
-      className={[
-        "enterprise-status",
-        positive ? "enterprise-status-positive" : "",
-        danger ? "enterprise-status-danger" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {value || "Unknown"}
-    </span>
-  );
-}
-
-function EmptyState({ children }) {
-  return (
-    <div className="enterprise-empty">
-      <FileCheck2 size={27} />
-      <strong>{children}</strong>
-    </div>
-  );
-}
-
-function PageHeader({
-  title,
-  description,
-  onRefresh,
-  action,
-}) {
-  return (
-    <div className="enterprise-heading">
-      <div>
-        <span className="enterprise-eyebrow">
-          APPA Finance Operations
-        </span>
-
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-
-      <div className="enterprise-heading-actions">
-        {action}
-
-        <button
-          type="button"
-          className="enterprise-secondary-button"
-          onClick={onRefresh}
-        >
-          <RefreshCw size={15} />
-          Refresh
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function EnterpriseModule({ module }) {
   const [rows, setRows] = useState([]);
@@ -149,7 +45,7 @@ export default function EnterpriseModule({ module }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -211,11 +107,11 @@ export default function EnterpriseModule({ module }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [module]);
 
   useEffect(() => {
     load();
-  }, [module]);
+  }, [load]);
 
   async function match(invoiceId) {
     try {
@@ -299,28 +195,6 @@ export default function EnterpriseModule({ module }) {
     }
   }
 
-  async function runAutomation() {
-    try {
-      setWorking("automation");
-      setMessage("");
-      setError("");
-
-      const run = await runAPCycle();
-
-      setMessage(
-        `${run.processName}: ${run.status}. ${run.itemsSucceeded}/${run.itemsProcessed} succeeded.`
-      );
-
-      await load();
-    } catch (requestError) {
-      setError(
-        requestError?.response?.data?.message ||
-          "Automation cycle failed."
-      );
-    } finally {
-      setWorking("");
-    }
-  }
 
   async function editSetting(setting) {
     const value =
@@ -345,7 +219,7 @@ export default function EnterpriseModule({ module }) {
         String(value)
       );
 
-      await loadSettings();
+      await load();
     } finally {
       setWorking("");
     }
@@ -445,466 +319,6 @@ export default function EnterpriseModule({ module }) {
   );
 }
 
-function InvoicesView({
-  rows,
-  working,
-  onRefresh,
-  onMatch,
-}) {
-  return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Invoices"
-        description="Extracted supplier invoices ready for validation, purchase-order matching and approval."
-        onRefresh={onRefresh}
-      />
-
-      {!rows.length ? (
-        <EmptyState>
-          No extracted invoices available.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-grid">
-          {rows.map((invoice) => (
-            <article
-              className="enterprise-card"
-              key={invoice.id}
-            >
-              <div className="enterprise-card-top">
-                <div className="enterprise-icon-box">
-                  <FileCheck2 size={19} />
-                </div>
-
-                <StatusBadge
-                  value={invoice.validationStatus}
-                />
-              </div>
-
-              <div className="enterprise-card-title">
-                <h3>
-                  {invoice.invoiceNumber ||
-                    "Invoice"}
-                </h3>
-
-                <p>{invoice.supplierName || "Unknown supplier"}</p>
-              </div>
-
-              <div className="enterprise-value">
-                {money(
-                  invoice.totalAmount,
-                  invoice.currency
-                )}
-              </div>
-
-              <div className="enterprise-detail-grid">
-                <div>
-                  <small>Purchase order</small>
-                  <strong>
-                    {invoice.purchaseOrderNumber || "Missing"}
-                  </strong>
-                </div>
-
-                <div>
-                  <small>Confidence</small>
-                  <strong>
-                    {invoice.extractionConfidence ?? 0}%
-                  </strong>
-                </div>
-
-                <div>
-                  <small>Invoice date</small>
-                  <strong>
-                    {invoice.invoiceDate || "—"}
-                  </strong>
-                </div>
-
-                <div>
-                  <small>Due date</small>
-                  <strong>
-                    {invoice.dueDate || "—"}
-                  </strong>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="enterprise-primary-button enterprise-full-button"
-                disabled={working === invoice.id}
-                onClick={() => onMatch(invoice.id)}
-              >
-                <ShieldCheck size={16} />
-
-                {working === invoice.id
-                  ? "Matching..."
-                  : "Run PO Match"}
-              </button>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function PurchaseOrdersView({
-  rows,
-  onRefresh,
-}) {
-  return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Purchase Orders"
-        description="Approved purchasing commitments used by the invoice matching engine."
-        onRefresh={onRefresh}
-      />
-
-      {!rows.length ? (
-        <EmptyState>
-          No purchase orders available.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-table-wrapper">
-          <table className="enterprise-table">
-            <thead>
-              <tr>
-                <th>PO number</th>
-                <th>Supplier</th>
-                <th>Order date</th>
-                <th>Subtotal</th>
-                <th>Tax</th>
-                <th>Total</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {rows.map((po) => (
-                <tr key={po.id}>
-                  <td>
-                    <div className="enterprise-table-primary">
-                      <ShoppingCart size={15} />
-                      <strong>{po.poNumber}</strong>
-                    </div>
-                  </td>
-
-                  <td>{po.supplierName}</td>
-                  <td>{po.orderDate || "—"}</td>
-
-                  <td>
-                    {money(
-                      po.subtotal,
-                      po.currency
-                    )}
-                  </td>
-
-                  <td>
-                    {money(
-                      po.taxAmount,
-                      po.currency
-                    )}
-                  </td>
-
-                  <td>
-                    <strong>
-                      {money(
-                        po.totalAmount,
-                        po.currency
-                      )}
-                    </strong>
-                  </td>
-
-                  <td>
-                    <StatusBadge value={po.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ApprovalsView({
-  rows,
-  working,
-  onRefresh,
-  onDecision,
-}) {
-  return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Approvals"
-        description="Automatic and manual invoice approval decisions with a complete operational record."
-        onRefresh={onRefresh}
-      />
-
-      {!rows.length ? (
-        <EmptyState>
-          No approval decisions recorded yet.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-grid">
-          {rows.map((approval) => (
-            <article
-              className="enterprise-card"
-              key={approval.id}
-            >
-              <div className="enterprise-card-top">
-                <div className="enterprise-icon-box">
-                  <CheckCircle2 size={19} />
-                </div>
-
-                <StatusBadge
-                  value={approval.decision}
-                />
-              </div>
-
-              <div className="enterprise-card-title">
-                <h3>{approval.invoiceNumber}</h3>
-                <p>{approval.supplierName}</p>
-              </div>
-
-              <div className="enterprise-value">
-                {money(
-                  approval.totalAmount,
-                  approval.currency
-                )}
-              </div>
-
-              <div className="enterprise-meta-line">
-                <span>{approval.approvalType}</span>
-                <span>•</span>
-                <span>
-                  {approval.approver || "System"}
-                </span>
-              </div>
-
-              {approval.comments && (
-                <p className="enterprise-description">
-                  {approval.comments}
-                </p>
-              )}
-
-              <div className="enterprise-card-actions">
-                <button
-                  type="button"
-                  className="enterprise-approve-button"
-                  disabled={working === approval.invoiceId}
-                  onClick={() =>
-                    onDecision(
-                      approval.invoiceId,
-                      "Approved"
-                    )
-                  }
-                >
-                  <CheckCircle2 size={15} />
-                  Approve
-                </button>
-
-                <button
-                  type="button"
-                  className="enterprise-reject-button"
-                  disabled={working === approval.invoiceId}
-                  onClick={() =>
-                    onDecision(
-                      approval.invoiceId,
-                      "Rejected"
-                    )
-                  }
-                >
-                  <XCircle size={15} />
-                  Reject
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ExceptionsView({
-  rows,
-  working,
-  onRefresh,
-  onResolve,
-}) {
-  const openCount = rows.filter(
-    (item) => item.status === "Open"
-  ).length;
-
-  return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Exceptions"
-        description={`${openCount} open exception${openCount === 1 ? "" : "s"} requiring operational review.`}
-        onRefresh={onRefresh}
-      />
-
-      {!rows.length ? (
-        <EmptyState>
-          No workflow exceptions recorded.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-grid">
-          {rows.map((item) => (
-            <article
-              className="enterprise-card"
-              key={item.id}
-            >
-              <div className="enterprise-card-top">
-                <div className="enterprise-icon-box enterprise-warning-icon">
-                  <AlertTriangle size={19} />
-                </div>
-
-                <StatusBadge value={item.status} />
-              </div>
-
-              <div className="enterprise-card-title">
-                <h3>
-                  {String(item.exceptionType)
-                    .replaceAll("_", " ")}
-                </h3>
-
-                <p>
-                  {item.invoiceNumber} ·{" "}
-                  {item.supplierName}
-                </p>
-              </div>
-
-              <div className="enterprise-meta-line">
-                <span>Severity</span>
-                <strong>{item.severity}</strong>
-              </div>
-
-              <p className="enterprise-description">
-                {item.description}
-              </p>
-
-              {item.resolution && (
-                <div className="enterprise-resolution">
-                  <small>Resolution</small>
-                  <p>{item.resolution}</p>
-                </div>
-              )}
-
-              {item.status === "Open" && (
-                <button
-                  type="button"
-                  className="enterprise-primary-button enterprise-full-button"
-                  disabled={working === item.id}
-                  onClick={() => onResolve(item.id)}
-                >
-                  <CheckCircle2 size={15} />
-                  Resolve Exception
-                </button>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AutomationView({
-  rows,
-  working,
-  onRefresh,
-  onRun,
-}) {
-  const action = (
-    <button
-      type="button"
-      className="enterprise-primary-button"
-      disabled={working === "automation"}
-      onClick={onRun}
-    >
-      <Play size={15} />
-
-      {working === "automation"
-        ? "Running..."
-        : "Run AP Cycle"}
-    </button>
-  );
-
-  return (
-    <section className="panel enterprise-panel">
-      <PageHeader
-        title="Automation"
-        description="Execution history for APPA invoice matching and finance workflow automation."
-        onRefresh={onRefresh}
-        action={action}
-      />
-
-      <div className="enterprise-info-banner">
-        <Bot size={19} />
-
-        <div>
-          <strong>
-            APPA Automation Engine
-          </strong>
-
-          <p>
-            Processes validated invoices through
-            matching, exception detection and
-            automatic approval. UiPath integration
-            uses the dedicated RPA API contract.
-          </p>
-        </div>
-      </div>
-
-      {!rows.length ? (
-        <EmptyState>
-          No automation runs recorded yet.
-        </EmptyState>
-      ) : (
-        <div className="enterprise-table-wrapper">
-          <table className="enterprise-table">
-            <thead>
-              <tr>
-                <th>Process</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Processed</th>
-                <th>Succeeded</th>
-                <th>Failed</th>
-                <th>Started</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {rows.map((run) => (
-                <tr key={run.id}>
-                  <td>
-                    <div className="enterprise-table-primary">
-                      <Bot size={15} />
-                      <strong>{run.processName}</strong>
-                    </div>
-                  </td>
-
-                  <td>{run.source}</td>
-
-                  <td>
-                    <StatusBadge value={run.status} />
-                  </td>
-
-                  <td>{run.itemsProcessed}</td>
-                  <td>{run.itemsSucceeded}</td>
-                  <td>{run.itemsFailed}</td>
-                  <td>{formatDate(run.startedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
 
 function ReportsView({
   report,

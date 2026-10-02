@@ -15,7 +15,12 @@
     "check": "node --check src/server.js",
     "db:postgres:schema": "node scripts/createPostgresSchema.js",
     "db:postgres:migrate": "node scripts/migrateSqliteToPostgres.js",
-    "test:rpa": "node test/rpaContract.js"
+    "test:rpa": "node test/rpaContract.js",
+    "test:legacy:isolation": "node test/crossOrganisationIsolation.js",
+    "test:legacy:users": "node test/userAdministrationIsolation.js",
+    "test:readiness": "node test/releaseReadiness.js",
+    "test:release": "npm run test:rpa && npm run test:readiness",
+    "test": "npm run test:release"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

@@ -21,12 +21,9 @@ import {
   Loader2,
   Play,
   RefreshCw,
-  RotateCcw,
   ServerCog,
   ShieldCheck,
   Workflow,
-  XCircle,
-  Zap,
 } from "lucide-react";
 
 import {

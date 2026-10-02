@@ -16,11 +16,7 @@ import {
   Bell,
   ChevronDown,
   LogOut,
-  ArrowUpRight,
-  Clock3,
   CircleCheck,
-  CircleAlert,
-  Workflow,
   Upload,
   Plus,
   Menu,
@@ -63,17 +59,6 @@ const baseNavigation = [
 
 
 
-function Status({ value }) {
-  const className = value.toLowerCase().replace(" ", "-");
-
-  return (
-    <span className={`status status-${className}`}>
-      <span className="status-dot" />
-      {value}
-    </span>
-  );
-}
-
 function App() {
   const [authUser, setAuthUser] =
     useState(null);
@@ -114,8 +99,10 @@ function App() {
   const workspaceTransitionTimerRef =
     useRef(null);
 
-  const organisations =
-    authUser?.organisations || [];
+  const organisations = useMemo(
+    () => authUser?.organisations || [],
+    [authUser]
+  );
 
   const selectedOrganisation =
     useMemo(() => {
@@ -541,12 +528,14 @@ function App() {
   const [active, setActive] = useState("Dashboard");
   const [documentUploadRequest, setDocumentUploadRequest] =
     useState(null);
+  const documentUploadRequestIdRef = useRef(0);
 
   function openDocumentUpload(
     documentType = null
   ) {
+    documentUploadRequestIdRef.current += 1;
     setDocumentUploadRequest({
-      id: Date.now(),
+      id: documentUploadRequestIdRef.current,
       documentType,
     });
 
