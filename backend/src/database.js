@@ -11,8 +11,11 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false,
   },
+  // Keep the per-instance pool deliberately small in
+  // serverless environments. Multiple Vercel instances can
+  // exist concurrently and share the upstream database limit.
   max: Number(
-    process.env.DATABASE_POOL_MAX || 10
+    process.env.DATABASE_POOL_MAX || 2
   ),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
