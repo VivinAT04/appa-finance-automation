@@ -154,9 +154,9 @@ async function ensureSupplier(
     [
       id,
       supplierCode,
-      "APPA Scenario Supplies Ltd",
-      "scenario-supplier@example.test",
-      "GST-APPA-SCENARIO",
+      "Northstar Technology Supplies Ltd",
+      "accounts@northstar-demo.example",
+      "GB-DEMO-882041",
       30,
       "Active",
       timestamp,
@@ -263,11 +263,11 @@ async function ensurePurchaseOrder(
           poId,
           poNumber,
           supplier.id,
-          "2026-09-29",
-          "INR",
-          23000,
-          4140,
-          27140,
+          "2026-10-02",
+          "GBP",
+          605,
+          121,
+          726,
           "Open",
           timestamp,
           timestamp,
@@ -278,21 +278,21 @@ async function ensurePurchaseOrder(
       const lines = [
         {
           description:
-            "Office Chairs",
+            "USB-C Docking Stations",
           quantity: 4,
           unitPrice: 4500,
           lineTotal: 18000,
         },
         {
           description:
-            "Printer Paper",
+            "Wireless Keyboards",
           quantity: 10,
           unitPrice: 300,
           lineTotal: 3000,
         },
         {
           description:
-            "File Storage Boxes",
+            "27-inch Office Monitors",
           quantity: 5,
           unitPrice: 400,
           lineTotal: 2000,
@@ -512,12 +512,12 @@ async function createInvoice({
           invoiceId,
           documentId,
           invoiceNumber,
-          "2026-09-29",
-          "2026-10-29",
+          "2026-10-02",
+          "2026-11-01",
           supplier.name,
           supplier.email,
           supplier.tax_id,
-          "INR",
+          "GBP",
           subtotal,
           taxAmount,
           totalAmount,
@@ -587,27 +587,27 @@ function baseLines() {
   return [
     {
       description:
-        "Office Chairs",
-      quantity: 4,
-      unitPrice: 4500,
-      taxRate: 18,
-      lineTotal: 18000,
+        "USB-C Docking Stations",
+      quantity: 2,
+      unitPrice: 125,
+      taxRate: 20,
+      lineTotal: 250,
     },
     {
       description:
-        "Printer Paper",
-      quantity: 10,
-      unitPrice: 300,
-      taxRate: 18,
-      lineTotal: 3000,
+        "Wireless Keyboards",
+      quantity: 3,
+      unitPrice: 45,
+      taxRate: 20,
+      lineTotal: 135,
     },
     {
       description:
-        "File Storage Boxes",
-      quantity: 5,
-      unitPrice: 400,
-      taxRate: 18,
-      lineTotal: 2000,
+        "27-inch Office Monitors",
+      quantity: 1,
+      unitPrice: 220,
+      taxRate: 20,
+      lineTotal: 220,
     },
   ];
 }
@@ -640,9 +640,9 @@ async function seedScenarios(
       supplier,
       poNumber:
         purchaseOrder.po_number,
-      subtotal: 23000,
-      taxAmount: 4140,
-      totalAmount: 27140,
+      subtotal: 605,
+      taxAmount: 121,
+      totalAmount: 726,
       lines: baseLines(),
     });
 
@@ -651,8 +651,8 @@ async function seedScenarios(
 
   mismatchLines[0] = {
     ...mismatchLines[0],
-    unitPrice: 5000,
-    lineTotal: 20000,
+    unitPrice: 150,
+    lineTotal: 300,
   };
 
   const mismatchInvoiceId =
@@ -665,9 +665,9 @@ async function seedScenarios(
       supplier,
       poNumber:
         purchaseOrder.po_number,
-      subtotal: 25000,
-      taxAmount: 4500,
-      totalAmount: 29500,
+      subtotal: 655,
+      taxAmount: 131,
+      totalAmount: 786,
       lines: mismatchLines,
     });
 
@@ -680,9 +680,9 @@ async function seedScenarios(
         `${SCENARIO_PREFIX}INV-MISSING-PO-001`,
       supplier,
       poNumber: "",
-      subtotal: 23000,
-      taxAmount: 4140,
-      totalAmount: 27140,
+      subtotal: 605,
+      taxAmount: 121,
+      totalAmount: 726,
       lines: baseLines(),
     });
 
@@ -696,9 +696,9 @@ async function seedScenarios(
       supplier,
       poNumber:
         purchaseOrder.po_number,
-      subtotal: 23000,
-      taxAmount: 4140,
-      totalAmount: 27140,
+      subtotal: 605,
+      taxAmount: 121,
+      totalAmount: 726,
       lines: baseLines(),
     });
 
@@ -1413,9 +1413,9 @@ async function runScenarios(
       supplier,
       poNumber:
         purchaseOrder.po_number,
-      subtotal: 23000,
-      taxAmount: 4140,
-      totalAmount: 27140,
+      subtotal: 605,
+      taxAmount: 121,
+      totalAmount: 726,
       lines: baseLines(),
     });
 

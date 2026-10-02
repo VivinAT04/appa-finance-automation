@@ -40,7 +40,7 @@ async function seedEnterpriseData(
     new Date().toISOString();
 
   const supplierCode =
-    "SUP-DEMO-001";
+    "SUP-UK-001";
 
   let supplier =
     await db.one(
@@ -88,9 +88,9 @@ async function seedEnterpriseData(
       [
         supplierId,
         supplierCode,
-        "Demo Office Supplies Ltd",
-        "accounts@demo-office.example",
-        "GST-DEMO-001",
+        "Northstar Technology Supplies Ltd",
+        "accounts@northstar-demo.example",
+        "GB-DEMO-882041",
         30,
         "Active",
         timestamp,
@@ -122,7 +122,7 @@ async function seedEnterpriseData(
   }
 
   const poNumber =
-    "PO-TEST-1001";
+    "PO-2026-1001";
 
   let po =
     await db.one(
@@ -152,22 +152,22 @@ async function seedEnterpriseData(
 
     const items = [
       [
-        "Office Chairs",
-        4,
-        4500,
-        18000,
+        "USB-C Docking Stations",
+        2,
+        125,
+        250,
       ],
       [
-        "Printer Paper",
-        10,
-        300,
-        3000,
+        "Wireless Keyboards",
+        3,
+        45,
+        135,
       ],
       [
-        "File Storage Boxes",
-        5,
-        400,
-        2000,
+        "27-inch Office Monitors",
+        1,
+        220,
+        220,
       ],
     ];
 
@@ -204,11 +204,11 @@ async function seedEnterpriseData(
             poId,
             poNumber,
             supplier.id,
-            "2026-09-20",
-            "INR",
-            23000,
-            4140,
-            27140,
+            "2026-09-28",
+            "GBP",
+            605,
+            121,
+            726,
             "Open",
             timestamp,
             timestamp,
