@@ -1,392 +1,435 @@
-const assert = require("assert");
-const crypto = require("crypto");
+const { randomUUID } = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const db = require("../src/database");
 
-const APPA_ORG =
-  "org-appa-finance";
+const TEST_ORG = "org-user-isolation-test";
+const USER_A = "user-isolation-appa";
+const USER_B = "user-isolation-company-b";
 
-const TEST_ORG =
-  "org-user-admin-isolation-test";
+const now = () => new Date().toISOString();
 
-const TEST_USER_A =
-  "user-admin-isolation-a";
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(`ASSERTION FAILED: ${message}`);
+  }
 
-const TEST_USER_B =
-  "user-admin-isolation-b";
-
-function now() {
-  return new Date().toISOString();
+  console.log(`✓ ${message}`);
 }
 
-function count(sql, ...params) {
-  return Number(
-    db.prepare(sql).get(
-      ...params
-    )?.total || 0
+async function count(sql, params = []) {
+  const row = await db.one(sql, params);
+  return Number(row?.count || 0);
+}
+
+async function cleanup() {
+  await db.execute(
+    `
+      DELETE FROM organisation_memberships
+      WHERE organisation_id = $1
+         OR user_id = ANY($2::text[])
+    `,
+    [TEST_ORG, [USER_A, USER_B]]
+  );
+
+  await db.execute(
+    `
+      DELETE FROM password_reset_tokens
+      WHERE user_id = ANY($1::text[])
+    `,
+    [[USER_A, USER_B]]
+  );
+
+  await db.execute(
+    `
+      DELETE FROM users
+      WHERE id = ANY($1::text[])
+    `,
+    [[USER_A, USER_B]]
+  );
+
+  await db.execute(
+    `
+      DELETE FROM organisations
+      WHERE id = $1
+    `,
+    [TEST_ORG]
   );
 }
 
-function cleanup() {
-  db.prepare(`
-    DELETE FROM audit_logs
-    WHERE organisation_id = ?
-  `).run(TEST_ORG);
+async function main() {
+  await cleanup();
 
-  db.prepare(`
-    DELETE FROM organisation_memberships
-    WHERE organisation_id = ?
-  `).run(TEST_ORG);
-
-  db.prepare(`
-    DELETE FROM organisation_memberships
-    WHERE user_id IN (?, ?)
-  `).run(
-    TEST_USER_A,
-    TEST_USER_B
+  const appa = await db.one(
+    `
+      SELECT id, code
+      FROM organisations
+      WHERE code = 'APPA'
+      LIMIT 1
+    `
   );
 
-  db.prepare(`
-    DELETE FROM users
-    WHERE id IN (?, ?)
-  `).run(
-    TEST_USER_A,
-    TEST_USER_B
+  assert(
+    appa,
+    "APPA organisation exists"
   );
 
-  db.prepare(`
-    DELETE FROM organisations
-    WHERE id = ?
-  `).run(TEST_ORG);
-}
-
-cleanup();
-
-try {
   const timestamp = now();
 
-  const appa = db.prepare(`
-    SELECT id
-    FROM organisations
-    WHERE id = ?
-      AND status = 'Active'
-    LIMIT 1
-  `).get(APPA_ORG);
-
-  assert(appa);
-
-  console.log(
-    "✓ APPA organisation exists"
-  );
-
-  db.prepare(`
-    INSERT INTO organisations (
-      id,
-      name,
-      code,
-      status,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ?,
-      'User Admin Test Company',
-      'UATC',
-      'Active',
-      ?,
-      ?
-    )
-  `).run(
-    TEST_ORG,
-    timestamp,
-    timestamp
-  );
-
-  const fakeHash =
-    crypto
-      .createHash("sha256")
-      .update(
-        "not-a-real-password"
+  await db.execute(
+    `
+      INSERT INTO organisations (
+        id,
+        name,
+        code,
+        status,
+        created_at,
+        updated_at
       )
-      .digest("hex");
-
-  db.prepare(`
-    INSERT INTO users (
-      id,
-      email,
-      password_hash,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ?,
-      'appa-admin-isolation@example.test',
-      ?,
-      'APPA Isolation User',
-      'Finance Analyst',
-      'Active',
-      NULL,
-      ?,
-      ?
-    )
-  `).run(
-    TEST_USER_A,
-    fakeHash,
-    timestamp,
-    timestamp
+      VALUES (
+        $1,
+        'User Isolation Company B',
+        'USER-ISO-B',
+        'Active',
+        $2,
+        $2
+      )
+    `,
+    [TEST_ORG, timestamp]
   );
 
-  db.prepare(`
-    INSERT INTO users (
-      id,
-      email,
-      password_hash,
-      full_name,
-      role,
-      status,
-      last_login_at,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ?,
-      'company-b-admin-isolation@example.test',
-      ?,
-      'Company B Isolation User',
-      'Finance Analyst',
-      'Active',
-      NULL,
-      ?,
-      ?
-    )
-  `).run(
-    TEST_USER_B,
-    fakeHash,
-    timestamp,
-    timestamp
-  );
-
-  db.prepare(`
-    INSERT INTO organisation_memberships (
-      id,
-      organisation_id,
-      user_id,
-      status,
-      created_at,
-      updated_at
-    )
-    VALUES (?, ?, ?, 'Active', ?, ?)
-  `).run(
-    crypto.randomUUID(),
-    APPA_ORG,
-    TEST_USER_A,
-    timestamp,
-    timestamp
-  );
-
-  db.prepare(`
-    INSERT INTO organisation_memberships (
-      id,
-      organisation_id,
-      user_id,
-      status,
-      created_at,
-      updated_at
-    )
-    VALUES (?, ?, ?, 'Active', ?, ?)
-  `).run(
-    crypto.randomUUID(),
-    TEST_ORG,
-    TEST_USER_B,
-    timestamp,
-    timestamp
-  );
-
-  const appaCanSeeB =
-    count(
-      `
-        SELECT COUNT(*) AS total
-        FROM organisation_memberships
-        WHERE organisation_id = ?
-          AND user_id = ?
-      `,
-      APPA_ORG,
-      TEST_USER_B
+  const passwordHash =
+    await bcrypt.hash(
+      "APPA-Test-Password-Only-2026!",
+      4
     );
 
-  assert.strictEqual(
-    appaCanSeeB,
-    0
+  await db.execute(
+    `
+      INSERT INTO users (
+        id,
+        email,
+        password_hash,
+        full_name,
+        role,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'APPA Isolation User',
+        'Finance Analyst',
+        'Active',
+        $4,
+        $4
+      )
+    `,
+    [
+      USER_A,
+      `appa-isolation-${randomUUID()}@example.test`,
+      passwordHash,
+      timestamp,
+    ]
   );
 
-  console.log(
-    "✓ APPA cannot list Company B-only user"
+  await db.execute(
+    `
+      INSERT INTO users (
+        id,
+        email,
+        password_hash,
+        full_name,
+        role,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'Company B Isolation User',
+        'Finance Analyst',
+        'Active',
+        $4,
+        $4
+      )
+    `,
+    [
+      USER_B,
+      `company-b-isolation-${randomUUID()}@example.test`,
+      passwordHash,
+      timestamp,
+    ]
   );
 
-  const companyBCanSeeA =
-    count(
-      `
-        SELECT COUNT(*) AS total
-        FROM organisation_memberships
-        WHERE organisation_id = ?
-          AND user_id = ?
-      `,
+  await db.execute(
+    `
+      INSERT INTO organisation_memberships (
+        id,
+        organisation_id,
+        user_id,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'Active',
+        $4,
+        $4
+      )
+    `,
+    [
+      randomUUID(),
+      appa.id,
+      USER_A,
+      timestamp,
+    ]
+  );
+
+  await db.execute(
+    `
+      INSERT INTO organisation_memberships (
+        id,
+        organisation_id,
+        user_id,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'Active',
+        $4,
+        $4
+      )
+    `,
+    [
+      randomUUID(),
       TEST_ORG,
-      TEST_USER_A
-    );
-
-  assert.strictEqual(
-    companyBCanSeeA,
-    0
+      USER_B,
+      timestamp,
+    ]
   );
 
-  console.log(
-    "✓ Company B cannot list APPA-only user"
-  );
-
-  const appaTargetB =
-    db.prepare(`
-      SELECT u.id
-      FROM organisation_memberships om
-      INNER JOIN users u
-        ON u.id = om.user_id
-      WHERE om.organisation_id = ?
-        AND u.id = ?
-      LIMIT 1
-    `).get(
-      APPA_ORG,
-      TEST_USER_B
-    );
-
-  assert.strictEqual(
-    appaTargetB,
-    undefined
-  );
-
-  console.log(
-    "✓ APPA cannot target Company B user for update"
-  );
-
-  const appaResetTargetB =
-    db.prepare(`
-      SELECT u.id
-      FROM organisation_memberships om
-      INNER JOIN users u
-        ON u.id = om.user_id
-      WHERE om.organisation_id = ?
-        AND om.user_id = ?
-        AND om.status = 'Active'
-        AND u.status = 'Active'
-      LIMIT 1
-    `).get(
-      APPA_ORG,
-      TEST_USER_B
-    );
-
-  assert.strictEqual(
-    appaResetTargetB,
-    undefined
-  );
-
-  console.log(
-    "✓ APPA cannot target Company B user for password reset"
-  );
-
-  const ownA =
-    db.prepare(`
-      SELECT u.id
-      FROM organisation_memberships om
-      INNER JOIN users u
-        ON u.id = om.user_id
-      WHERE om.organisation_id = ?
-        AND om.user_id = ?
-      LIMIT 1
-    `).get(
-      APPA_ORG,
-      TEST_USER_A
-    );
-
-  assert(ownA);
-
-  console.log(
-    "✓ APPA can access its own member"
-  );
-
-  const ownB =
-    db.prepare(`
-      SELECT u.id
-      FROM organisation_memberships om
-      INNER JOIN users u
-        ON u.id = om.user_id
-      WHERE om.organisation_id = ?
-        AND om.user_id = ?
-      LIMIT 1
-    `).get(
-      TEST_ORG,
-      TEST_USER_B
-    );
-
-  assert(ownB);
-
-  console.log(
-    "✓ Company B can access its own member"
-  );
-
-  const integrity =
-    db.prepare(
-      "PRAGMA integrity_check"
-    ).get();
-
-  assert.strictEqual(
-    Object.values(integrity)[0],
-    "ok"
-  );
-
-  const fk =
-    db.prepare(
-      "PRAGMA foreign_key_check"
-    ).all();
-
-  assert.strictEqual(
-    fk.length,
-    0
-  );
-
-  console.log(
-    "✓ SQLite integrity remains healthy"
-  );
-
-  console.log(
-    "✓ Foreign keys remain clean"
-  );
-
-  console.log("");
-  console.log(
-    "USER ADMINISTRATION ISOLATION TEST PASSED"
-  );
-} finally {
-  cleanup();
-
-  const remaining =
-    count(
+  assert(
+    await count(
       `
-        SELECT COUNT(*) AS total
-        FROM organisations
-        WHERE id = ?
+        SELECT COUNT(*)::int AS count
+        FROM users u
+        JOIN organisation_memberships m
+          ON m.user_id = u.id
+        WHERE m.organisation_id = $1
+          AND u.id = $2
       `,
-      TEST_ORG
-    );
-
-  assert.strictEqual(
-    remaining,
-    0
+      [appa.id, USER_B]
+    ) === 0,
+    "APPA cannot list Company B-only user"
   );
 
-  console.log(
-    "✓ Temporary Company B and test users cleaned"
+  assert(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM users u
+        JOIN organisation_memberships m
+          ON m.user_id = u.id
+        WHERE m.organisation_id = $1
+          AND u.id = $2
+      `,
+      [TEST_ORG, USER_A]
+    ) === 0,
+    "Company B cannot list APPA-only user"
+  );
+
+  const appaUpdate = await db.execute(
+    `
+      UPDATE users
+      SET full_name = 'SHOULD NOT UPDATE',
+          updated_at = $1
+      WHERE id = $2
+        AND EXISTS (
+          SELECT 1
+          FROM organisation_memberships m
+          WHERE m.user_id = users.id
+            AND m.organisation_id = $3
+            AND m.status = 'Active'
+        )
+    `,
+    [now(), USER_B, appa.id]
+  );
+
+  assert(
+    Number(appaUpdate.rowCount || 0) === 0,
+    "APPA cannot target Company B user for update"
+  );
+
+  const resetId = randomUUID();
+
+  const resetInsert = await db.execute(
+    `
+      INSERT INTO password_reset_tokens (
+        id,
+        user_id,
+        token_hash,
+        expires_at,
+        created_at
+      )
+      SELECT
+        $1,
+        u.id,
+        $2,
+        $3,
+        $4
+      FROM users u
+      WHERE u.id = $5
+        AND EXISTS (
+          SELECT 1
+          FROM organisation_memberships m
+          WHERE m.user_id = u.id
+            AND m.organisation_id = $6
+            AND m.status = 'Active'
+        )
+    `,
+    [
+      resetId,
+      randomUUID(),
+      new Date(
+        Date.now() + 60 * 60 * 1000
+      ).toISOString(),
+      now(),
+      USER_B,
+      appa.id,
+    ]
+  );
+
+  assert(
+    Number(resetInsert.rowCount || 0) === 0,
+    "APPA cannot target Company B user for password reset"
+  );
+
+  assert(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM organisation_memberships
+        WHERE organisation_id = $1
+          AND user_id = $2
+          AND status = 'Active'
+      `,
+      [appa.id, USER_A]
+    ) === 1,
+    "APPA can access its own member"
+  );
+
+  assert(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM organisation_memberships
+        WHERE organisation_id = $1
+          AND user_id = $2
+          AND status = 'Active'
+      `,
+      [TEST_ORG, USER_B]
+    ) === 1,
+    "Company B can access its own member"
+  );
+
+  const health = await db.healthCheck();
+
+  assert(
+    Boolean(health),
+    "PostgreSQL health check passes"
+  );
+
+  const orphanMemberships =
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM organisation_memberships m
+        LEFT JOIN organisations o
+          ON o.id = m.organisation_id
+        LEFT JOIN users u
+          ON u.id = m.user_id
+        WHERE o.id IS NULL
+           OR u.id IS NULL
+      `
+    );
+
+  assert(
+    orphanMemberships === 0,
+    "Foreign-key relationships remain clean"
   );
 }
+
+(async () => {
+  let failure = null;
+
+  try {
+    await main();
+
+    console.log("");
+    console.log(
+      "USER ADMINISTRATION ISOLATION TEST PASSED"
+    );
+  } catch (error) {
+    failure = error;
+    console.error(error);
+  }
+
+  try {
+    await cleanup();
+
+    const remainingOrg = await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM organisations
+        WHERE id = $1
+      `,
+      [TEST_ORG]
+    );
+
+    const remainingUsers = await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM users
+        WHERE id = ANY($1::text[])
+      `,
+      [[USER_A, USER_B]]
+    );
+
+    if (
+      remainingOrg !== 0 ||
+      remainingUsers !== 0
+    ) {
+      throw new Error(
+        "Temporary user isolation cleanup failed."
+      );
+    }
+
+    console.log(
+      "✓ Temporary Company B and test users cleaned"
+    );
+  } catch (cleanupError) {
+    console.error(cleanupError);
+
+    if (!failure) {
+      failure = cleanupError;
+    }
+  }
+
+  await db.close();
+
+  if (failure) {
+    process.exitCode = 1;
+  }
+})();

@@ -1,709 +1,641 @@
-const {
-  randomUUID,
-} = require("crypto");
+const { randomUUID } = require("crypto");
 
-const db =
-  require("../src/database");
-
+const db = require("../src/database");
 const {
   matchInvoice,
   getMatch,
 } = require("../src/matchingService");
 
-const TEST_ORG =
-  "org-cross-isolation-test";
+const TEST_ORG = "org-cross-isolation-test";
+const TEST_PREFIX = "E2E-CROSS-ORG";
 
-const TEST_PREFIX =
-  "E2E-CROSS-ORG";
+const now = () => new Date().toISOString();
 
-const now =
-  () => new Date().toISOString();
-
-function assert(
-  condition,
-  message
-) {
+function assert(condition, message) {
   if (!condition) {
-    throw new Error(
-      `ASSERTION FAILED: ${message}`
-    );
+    throw new Error(`ASSERTION FAILED: ${message}`);
   }
 
-  console.log(
-    `✓ ${message}`
-  );
+  console.log(`✓ ${message}`);
 }
 
-function cleanup() {
-  const docs =
-    db.prepare(`
+async function count(sql, params = []) {
+  const row = await db.one(sql, params);
+  return Number(row?.count || 0);
+}
+
+async function cleanup() {
+  /*
+   * Remove only records owned by the temporary test organisation.
+   * The order intentionally follows the foreign-key graph.
+   */
+  const docs = await db.many(
+    `
       SELECT id
       FROM documents
-      WHERE organisation_id = ?
-    `).all(TEST_ORG);
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
+  );
 
-  const docIds =
-    docs.map(
-      (row) => row.id
-    );
+  const docIds = docs.map((row) => row.id);
 
   if (docIds.length) {
-    const placeholders =
-      docIds.map(() => "?").join(",");
-
-    const invoices =
-      db.prepare(`
+    const invoices = await db.many(
+      `
         SELECT id
         FROM invoices
-        WHERE document_id IN (
-          ${placeholders}
-        )
-      `).all(
-        ...docIds
-      );
+        WHERE document_id = ANY($1::text[])
+      `,
+      [docIds]
+    );
 
-    const invoiceIds =
-      invoices.map(
-        (row) => row.id
-      );
+    const invoiceIds = invoices.map((row) => row.id);
 
     if (invoiceIds.length) {
-      const invoicePlaceholders =
-        invoiceIds
-          .map(() => "?")
-          .join(",");
-
-      db.prepare(`
-        DELETE FROM approvals
-        WHERE invoice_id IN (
-          ${invoicePlaceholders}
-        )
-      `).run(
-        ...invoiceIds
+      await db.execute(
+        `
+          DELETE FROM approvals
+          WHERE invoice_id = ANY($1::text[])
+        `,
+        [invoiceIds]
       );
 
-      db.prepare(`
-        DELETE FROM exceptions
-        WHERE invoice_id IN (
-          ${invoicePlaceholders}
-        )
-      `).run(
-        ...invoiceIds
+      await db.execute(
+        `
+          DELETE FROM exceptions
+          WHERE invoice_id = ANY($1::text[])
+        `,
+        [invoiceIds]
       );
 
-      db.prepare(`
-        DELETE FROM invoice_matches
-        WHERE invoice_id IN (
-          ${invoicePlaceholders}
-        )
-      `).run(
-        ...invoiceIds
+      await db.execute(
+        `
+          DELETE FROM invoice_matches
+          WHERE invoice_id = ANY($1::text[])
+        `,
+        [invoiceIds]
       );
 
-      db.prepare(`
-        DELETE FROM invoice_line_items
-        WHERE invoice_id IN (
-          ${invoicePlaceholders}
-        )
-      `).run(
-        ...invoiceIds
+      await db.execute(
+        `
+          DELETE FROM invoice_line_items
+          WHERE invoice_id = ANY($1::text[])
+        `,
+        [invoiceIds]
       );
 
-      db.prepare(`
-        DELETE FROM invoices
-        WHERE id IN (
-          ${invoicePlaceholders}
-        )
-      `).run(
-        ...invoiceIds
+      await db.execute(
+        `
+          DELETE FROM invoices
+          WHERE id = ANY($1::text[])
+        `,
+        [invoiceIds]
       );
     }
-
-    db.prepare(`
-      DELETE FROM documents
-      WHERE organisation_id = ?
-    `).run(
-      TEST_ORG
-    );
   }
 
-  db.prepare(`
-    DELETE FROM automation_runs
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM audit_logs
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  db.prepare(`
-    DELETE FROM audit_logs
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM automation_runs
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  db.prepare(`
-    DELETE FROM app_settings
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM documents
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  const pos =
-    db.prepare(`
+  const purchaseOrders = await db.many(
+    `
       SELECT id
       FROM purchase_orders
-      WHERE organisation_id = ?
-    `).all(
-      TEST_ORG
-    );
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
+  );
 
-  for (const po of pos) {
-    db.prepare(`
-      DELETE FROM purchase_order_items
-      WHERE purchase_order_id = ?
-    `).run(
-      po.id
+  const poIds = purchaseOrders.map((row) => row.id);
+
+  if (poIds.length) {
+    await db.execute(
+      `
+        DELETE FROM purchase_order_items
+        WHERE purchase_order_id = ANY($1::text[])
+      `,
+      [poIds]
     );
   }
 
-  db.prepare(`
-    DELETE FROM purchase_orders
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM purchase_orders
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  db.prepare(`
-    DELETE FROM suppliers
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM suppliers
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  db.prepare(`
-    DELETE FROM organisation_memberships
-    WHERE organisation_id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM app_settings
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
   );
 
-  db.prepare(`
-    DELETE FROM organisations
-    WHERE id = ?
-  `).run(
-    TEST_ORG
+  await db.execute(
+    `
+      DELETE FROM organisation_memberships
+      WHERE organisation_id = $1
+    `,
+    [TEST_ORG]
+  );
+
+  await db.execute(
+    `
+      DELETE FROM organisations
+      WHERE id = $1
+    `,
+    [TEST_ORG]
   );
 }
 
 async function main() {
-  cleanup();
+  await cleanup();
 
-  const appa =
-    db.prepare(`
-      SELECT id
+  const appa = await db.one(
+    `
+      SELECT id, name, code
       FROM organisations
       WHERE code = 'APPA'
       LIMIT 1
-    `).get();
-
-  assert(
-    appa,
-    "APPA organisation exists"
+    `
   );
 
-  const timestamp =
-    now();
+  assert(appa, "APPA organisation exists");
 
-  db.prepare(`
-    INSERT INTO organisations (
-      id,
-      name,
-      code,
-      status,
-      created_at,
-      updated_at
-    )
-    VALUES (?, ?, ?, 'Active', ?, ?)
-  `).run(
-    TEST_ORG,
-    "Cross Organisation Test Ltd",
-    "CROSSISO",
-    timestamp,
-    timestamp
-  );
-
-  const appaSupplier =
-    db.prepare(`
-      SELECT *
+  const appaSupplier = await db.one(
+    `
+      SELECT id, supplier_code
       FROM suppliers
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       ORDER BY created_at
       LIMIT 1
-    `).get(
-      appa.id
-    );
+    `,
+    [appa.id]
+  );
 
   assert(
     appaSupplier,
     "APPA supplier exists for shared-code test"
   );
 
-  const appaPO =
-    db.prepare(`
-      SELECT *
+  const appaPo = await db.one(
+    `
+      SELECT id, po_number
       FROM purchase_orders
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       ORDER BY created_at
       LIMIT 1
-    `).get(
-      appa.id
-    );
+    `,
+    [appa.id]
+  );
 
   assert(
-    appaPO,
+    appaPo,
     "APPA purchase order exists for shared-number test"
   );
 
-  const supplierId =
-    randomUUID();
-
-  db.prepare(`
-    INSERT INTO suppliers (
-      id,
-      supplier_code,
-      name,
-      email,
-      tax_id,
-      payment_terms_days,
-      status,
-      created_at,
-      updated_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    supplierId,
-    appaSupplier.supplier_code,
-    `${TEST_PREFIX} Supplier`,
-    "cross-isolation@example.test",
-    "CROSS-TEST-TAX",
-    30,
-    "Active",
-    timestamp,
-    timestamp,
-    TEST_ORG
-  );
-
-  assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM suppliers
-      WHERE supplier_code = ?
-    `).get(
-      appaSupplier.supplier_code
-    ).count >= 2,
-    "same supplier code can exist across organisations"
-  );
-
-  const poId =
-    randomUUID();
-
-  db.prepare(`
-    INSERT INTO purchase_orders (
-      id,
-      po_number,
-      supplier_id,
-      order_date,
-      currency,
-      subtotal,
-      tax_amount,
-      total_amount,
-      status,
-      created_at,
-      updated_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    poId,
-    appaPO.po_number,
-    supplierId,
-    "2026-09-30",
-    "INR",
-    100,
-    18,
-    118,
-    "Open",
-    timestamp,
-    timestamp,
-    TEST_ORG
-  );
-
-  assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM purchase_orders
-      WHERE po_number = ?
-    `).get(
-      appaPO.po_number
-    ).count >= 2,
-    "same PO number can exist across organisations"
-  );
-
-  db.prepare(`
-    INSERT INTO purchase_order_items (
-      id,
-      purchase_order_id,
-      description,
-      quantity,
-      unit_price,
-      line_total,
-      position,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    poId,
-    "Cross Organisation Test Item",
-    1,
-    100,
-    100,
-    0,
-    timestamp
-  );
-
-  const appaSetting =
-    db.prepare(`
-      SELECT *
+  const appaSetting = await db.one(
+    `
+      SELECT setting_key, setting_value
       FROM app_settings
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       ORDER BY setting_key
       LIMIT 1
-    `).get(
-      appa.id
-    );
+    `,
+    [appa.id]
+  );
 
   assert(
     appaSetting,
     "APPA setting exists for shared-key test"
   );
 
-  db.prepare(`
-    INSERT INTO app_settings (
-      organisation_id,
-      setting_key,
-      setting_value,
-      description,
-      updated_at
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    TEST_ORG,
-    appaSetting.setting_key,
-    appaSetting.setting_value,
-    "Cross-company isolation test",
-    timestamp
+  const createdAt = now();
+
+  await db.execute(
+    `
+      INSERT INTO organisations (
+        id,
+        name,
+        code,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, 'Active', $4, $4)
+    `,
+    [
+      TEST_ORG,
+      "APPA Isolation Test Company B",
+      "APPA-TEST-B",
+      createdAt,
+    ]
+  );
+
+  const supplierId = randomUUID();
+
+  await db.execute(
+    `
+      INSERT INTO suppliers (
+        id,
+        supplier_code,
+        name,
+        email,
+        tax_id,
+        payment_terms_days,
+        status,
+        created_at,
+        updated_at,
+        organisation_id
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $8, $9
+      )
+    `,
+    [
+      supplierId,
+      appaSupplier.supplier_code,
+      "Company B Shared Supplier",
+      "company-b-supplier@example.test",
+      "TEST-TAX-B",
+      30,
+      "Active",
+      createdAt,
+      TEST_ORG,
+    ]
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM app_settings
-      WHERE setting_key = ?
-    `).get(
-      appaSetting.setting_key
-    ).count >= 2,
-    "same setting key can exist across organisations"
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM suppliers
+        WHERE supplier_code = $1
+      `,
+      [appaSupplier.supplier_code]
+    ) >= 2,
+    "same supplier code can exist across organisations"
   );
 
-  for (const [key, value] of [
-    ["amount_tolerance", "1.00"],
-    ["auto_approval_match_score", "100"],
-    ["duplicate_detection", "true"],
-  ]) {
-    db.prepare(`
+  const poId = randomUUID();
+
+  await db.execute(
+    `
+      INSERT INTO purchase_orders (
+        id,
+        po_number,
+        supplier_id,
+        order_date,
+        currency,
+        subtotal,
+        tax_amount,
+        total_amount,
+        status,
+        created_at,
+        updated_at,
+        organisation_id
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        CURRENT_DATE,
+        'INR',
+        23000,
+        4140,
+        27140,
+        'Open',
+        $4,
+        $4,
+        $5
+      )
+    `,
+    [
+      poId,
+      appaPo.po_number,
+      supplierId,
+      createdAt,
+      TEST_ORG,
+    ]
+  );
+
+  assert(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM purchase_orders
+        WHERE po_number = $1
+      `,
+      [appaPo.po_number]
+    ) >= 2,
+    "same PO number can exist across organisations"
+  );
+
+  await db.execute(
+    `
       INSERT INTO app_settings (
-        organisation_id,
         setting_key,
         setting_value,
         description,
-        updated_at
+        updated_at,
+        organisation_id
       )
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(
-        organisation_id,
-        setting_key
-      )
-      DO UPDATE SET
-        setting_value =
-          excluded.setting_value,
-        updated_at =
-          excluded.updated_at
-    `).run(
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    [
+      appaSetting.setting_key,
+      "COMPANY-B-TEST-VALUE",
+      "Cross-company isolation test",
+      createdAt,
       TEST_ORG,
-      key,
-      value,
-      "Cross-company E2E setting",
-      timestamp
-    );
-  }
-
-  const documentId =
-    randomUUID();
-
-  db.prepare(`
-    INSERT INTO documents (
-      id,
-      original_name,
-      stored_name,
-      mime_type,
-      size,
-      document_type,
-      status,
-      extraction_status,
-      uploaded_by,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    documentId,
-    "cross-company-test.pdf",
-    `${TEST_PREFIX}.synthetic`,
-    "application/pdf",
-    0,
-    "Invoice",
-    "Processed",
-    "Completed",
-    "E2E Isolation Test",
-    timestamp,
-    TEST_ORG
-  );
-
-  const invoiceId =
-    randomUUID();
-
-  db.prepare(`
-    INSERT INTO invoices (
-      id,
-      document_id,
-      invoice_number,
-      invoice_date,
-      due_date,
-      supplier_name,
-      supplier_email,
-      supplier_tax_id,
-      currency,
-      subtotal,
-      tax_amount,
-      total_amount,
-      purchase_order_number,
-      extraction_confidence,
-      validation_status,
-      validation_message,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    invoiceId,
-    documentId,
-    `${TEST_PREFIX}-INV`,
-    "30/09/2026",
-    "30/10/2026",
-    `${TEST_PREFIX} Supplier`,
-    "cross-isolation@example.test",
-    "CROSS-TEST-TAX",
-    "INR",
-    100,
-    18,
-    118,
-    appaPO.po_number,
-    100,
-    "Validated",
-    "Cross-company E2E invoice",
-    timestamp,
-    timestamp
-  );
-
-  db.prepare(`
-    INSERT INTO invoice_line_items (
-      id,
-      invoice_id,
-      description,
-      quantity,
-      unit_price,
-      tax_rate,
-      line_total,
-      position,
-      created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    invoiceId,
-    "Cross Organisation Test Item",
-    1,
-    100,
-    18,
-    100,
-    0,
-    timestamp
-  );
-
-  db.prepare(`
-    INSERT INTO audit_logs (
-      id,
-      action,
-      entity_type,
-      entity_id,
-      description,
-      created_at,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    "E2E_CROSS_ORG_TEST",
-    "invoice",
-    invoiceId,
-    "Cross-company isolation marker",
-    timestamp,
-    TEST_ORG
-  );
-
-  db.prepare(`
-    INSERT INTO automation_runs (
-      id,
-      process_name,
-      source,
-      status,
-      items_processed,
-      items_succeeded,
-      items_failed,
-      started_at,
-      completed_at,
-      details,
-      organisation_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    "Cross Organisation E2E",
-    "APPA Engine",
-    "Completed",
-    1,
-    1,
-    0,
-    timestamp,
-    timestamp,
-    "Cross-company isolation marker",
-    TEST_ORG
+    ]
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM documents
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM app_settings
+        WHERE setting_key = $1
+      `,
+      [appaSetting.setting_key]
+    ) >= 2,
+    "same setting key can exist across organisations"
+  );
+
+  const documentId = randomUUID();
+  const invoiceId = randomUUID();
+
+  await db.execute(
+    `
+      INSERT INTO documents (
+        id,
+        original_name,
+        stored_name,
+        mime_type,
+        size,
+        document_type,
+        status,
+        extraction_status,
+        uploaded_by,
+        created_at,
+        organisation_id
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'application/pdf',
+        1,
+        'Invoice',
+        'Processed',
+        'Completed',
+        'Automated Test',
+        $4,
+        $5
+      )
+    `,
+    [
       documentId,
-      appa.id
-    ).count === 0,
+      `${TEST_PREFIX}-invoice.pdf`,
+      `${TEST_PREFIX}-invoice.pdf`,
+      createdAt,
+      TEST_ORG,
+    ]
+  );
+
+  await db.execute(
+    `
+      INSERT INTO invoices (
+        id,
+        document_id,
+        invoice_number,
+        supplier_name,
+        purchase_order_number,
+        invoice_date,
+        due_date,
+        currency,
+        subtotal,
+        tax_amount,
+        total_amount,
+        extraction_confidence,
+        validation_status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        CURRENT_DATE,
+        CURRENT_DATE + 30,
+        'INR',
+        23000,
+        4140,
+        27140,
+        0.99,
+        'Validated',
+        $6,
+        $6
+      )
+    `,
+    [
+      invoiceId,
+      documentId,
+      `${TEST_PREFIX}-INV-001`,
+      "Company B Shared Supplier",
+      appaPo.po_number,
+      createdAt,
+    ]
+  );
+
+  await db.execute(
+    `
+      INSERT INTO audit_logs (
+        id,
+        entity_type,
+        entity_id,
+        action,
+        description,
+        created_at,
+        organisation_id
+      )
+      VALUES (
+        $1,
+        'Invoice',
+        $2,
+        'CROSS_ORG_TEST',
+        'Cross-company isolation marker',
+        $3,
+        $4
+      )
+    `,
+    [
+      randomUUID(),
+      invoiceId,
+      createdAt,
+      TEST_ORG,
+    ]
+  );
+
+  await db.execute(
+    `
+      INSERT INTO automation_runs (
+        id,
+        process_name,
+        source,
+        status,
+        started_at,
+        completed_at,
+        items_processed,
+        items_succeeded,
+        items_failed,
+        details,
+        organisation_id
+      )
+      VALUES (
+        $1,
+        'Cross Organisation Isolation Test',
+        'Automated Test',
+        'Completed',
+        $2,
+        $2,
+        1,
+        1,
+        0,
+        'Cross-company isolation marker',
+        $3
+      )
+    `,
+    [
+      randomUUID(),
+      createdAt,
+      TEST_ORG,
+    ]
+  );
+
+  assert(
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM documents
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [documentId, appa.id]
+    ) === 0,
     "APPA cannot see Company B document through tenant predicate"
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM invoices i
-      INNER JOIN documents d
-        ON d.id = i.document_id
-      WHERE
-        i.id = ?
-        AND d.organisation_id = ?
-    `).get(
-      invoiceId,
-      appa.id
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM invoices i
+        JOIN documents d
+          ON d.id = i.document_id
+        WHERE i.id = $1
+          AND d.organisation_id = $2
+      `,
+      [invoiceId, appa.id]
+    ) === 0,
     "APPA cannot see Company B invoice"
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM suppliers
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
-      supplierId,
-      appa.id
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM suppliers
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [supplierId, appa.id]
+    ) === 0,
     "APPA cannot see Company B supplier by known ID"
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM purchase_orders
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
-      poId,
-      appa.id
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM purchase_orders
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [poId, appa.id]
+    ) === 0,
     "APPA cannot see Company B PO by known ID"
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM audit_logs
-      WHERE
-        entity_id = ?
-        AND organisation_id = ?
-    `).get(
-      invoiceId,
-      appa.id
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM audit_logs
+        WHERE entity_id = $1
+          AND organisation_id = $2
+      `,
+      [invoiceId, appa.id]
+    ) === 0,
     "APPA cannot see Company B audit marker"
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM automation_runs
-      WHERE
-        details = ?
-        AND organisation_id = ?
-    `).get(
-      "Cross-company isolation marker",
-      appa.id
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM automation_runs
+        WHERE details = $1
+          AND organisation_id = $2
+      `,
+      ["Cross-company isolation marker", appa.id]
+    ) === 0,
     "APPA cannot see Company B automation run"
   );
 
-  let foreignMatchRejected =
-    false;
+  let foreignMatchRejected = false;
 
   try {
-    matchInvoice(
-      invoiceId,
-      appa.id
-    );
+    await matchInvoice(invoiceId, appa.id);
   } catch (error) {
     foreignMatchRejected =
-      /invoice not found/i.test(
-        error.message
-      );
+      /invoice not found/i.test(error.message);
   }
 
   assert(
@@ -712,18 +644,12 @@ async function main() {
   );
 
   assert(
-    getMatch(
-      invoiceId,
-      appa.id
-    ) === null,
+    (await getMatch(invoiceId, appa.id)) === null,
     "APPA cannot read Company B match"
   );
 
   const result =
-    matchInvoice(
-      invoiceId,
-      TEST_ORG
-    );
+    await matchInvoice(invoiceId, TEST_ORG);
 
   assert(
     result,
@@ -736,22 +662,19 @@ async function main() {
   );
 
   assert(
-    getMatch(
-      invoiceId,
-      appa.id
-    ) === null,
+    (await getMatch(invoiceId, appa.id)) === null,
     "Company B match remains hidden from APPA"
   );
 
-  const appaDocument =
-    db.prepare(`
+  const appaDocument = await db.one(
+    `
       SELECT id
       FROM documents
-      WHERE organisation_id = ?
+      WHERE organisation_id = $1
       LIMIT 1
-    `).get(
-      appa.id
-    );
+    `,
+    [appa.id]
+  );
 
   assert(
     appaDocument,
@@ -759,39 +682,54 @@ async function main() {
   );
 
   assert(
-    db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM documents
-      WHERE
-        id = ?
-        AND organisation_id = ?
-    `).get(
-      appaDocument.id,
-      TEST_ORG
-    ).count === 0,
+    await count(
+      `
+        SELECT COUNT(*)::int AS count
+        FROM documents
+        WHERE id = $1
+          AND organisation_id = $2
+      `,
+      [appaDocument.id, TEST_ORG]
+    ) === 0,
     "Company B cannot see APPA document"
   );
 
-  const integrity =
-    db.pragma(
-      "integrity_check",
-      { simple: true }
-    );
+  const health = await db.healthCheck();
 
   assert(
-    integrity === "ok",
-    "SQLite integrity remains healthy"
+    Boolean(health),
+    "PostgreSQL health check passes"
+  );
+
+  const fkViolations = await db.many(
+    `
+      SELECT
+        tc.table_name,
+        kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.constraint_schema = kcu.constraint_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM information_schema.tables t
+          WHERE t.table_schema = 'public'
+            AND t.table_name = tc.table_name
+        )
+    `
   );
 
   assert(
-    db.pragma(
-      "foreign_key_check"
-    ).length === 0,
-    "foreign keys remain clean"
+    fkViolations.length === 0,
+    "PostgreSQL foreign-key metadata remains valid"
   );
 }
 
 (async () => {
+  let failure = null;
+
   try {
     await main();
 
@@ -799,17 +737,22 @@ async function main() {
     console.log(
       "CROSS-COMPANY ISOLATION TEST PASSED"
     );
-  } finally {
-    cleanup();
+  } catch (error) {
+    failure = error;
+    console.error(error);
+  }
 
-    const remaining =
-      db.prepare(`
-        SELECT COUNT(*) AS count
+  try {
+    await cleanup();
+
+    const remaining = await count(
+      `
+        SELECT COUNT(*)::int AS count
         FROM organisations
-        WHERE id = ?
-      `).get(
-        TEST_ORG
-      ).count;
+        WHERE id = $1
+      `,
+      [TEST_ORG]
+    );
 
     if (remaining !== 0) {
       throw new Error(
@@ -820,12 +763,17 @@ async function main() {
     console.log(
       "✓ Temporary Company B cleaned"
     );
+  } catch (cleanupError) {
+    console.error(cleanupError);
 
-    db.close();
+    if (!failure) {
+      failure = cleanupError;
+    }
   }
-})().catch(
-  (error) => {
-    console.error(error);
+
+  await db.close();
+
+  if (failure) {
     process.exitCode = 1;
   }
-);
+})();
