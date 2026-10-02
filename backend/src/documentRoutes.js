@@ -7,7 +7,19 @@ const db = require("./database");
 
 const router = express.Router();
 
-const uploadDir = path.join(__dirname, "..", "uploads");
+/*
+ * Local development stores uploaded documents under backend/uploads.
+ *
+ * Vercel serverless functions cannot write to the deployed /var/task
+ * application filesystem. Their writable ephemeral filesystem is /tmp.
+ * This prevents document route initialisation from crashing unrelated
+ * API routes such as /api/rpa/work-items.
+ */
+const uploadDir =
+  process.env.VERCEL
+    ? path.join("/tmp", "appa-finance-uploads")
+    : path.join(__dirname, "..", "uploads");
+
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const allowedMimeTypes = new Set([
