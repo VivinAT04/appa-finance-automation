@@ -536,16 +536,19 @@ export async function adminResetUserPassword(
 
 
 export async function submitBillToDocuments(file) {
-  const document = await uploadDocument(
-    file,
-    "Invoice"
+  const form = new FormData();
+
+  form.append("document", file);
+  form.append("documentType", "Invoice");
+  form.append("processImmediately", "true");
+
+  const response = await api.post(
+    "/documents/upload",
+    form
   );
 
-  const invoice =
-    await processInvoiceDocument(document.id);
-
   return {
-    document,
-    invoice,
+    document: response.data.document,
+    invoice: response.data.invoice,
   };
 }

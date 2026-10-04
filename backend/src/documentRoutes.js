@@ -4,6 +4,9 @@ const path = require("path");
 const fs = require("fs");
 const { randomUUID } = require("crypto");
 const db = require("./database");
+const {
+  processInvoiceDocument,
+} = require("./invoiceExtractionService");
 
 const router = express.Router();
 
@@ -320,9 +323,25 @@ router.post(
       ]
     );
 
+    let invoice = null;
+
+    const processImmediately =
+      req.body.processImmediately === "true";
+
+    if (
+      processImmediately &&
+      documentType.toLowerCase() === "invoice"
+    ) {
+      invoice = await processInvoiceDocument(
+        id,
+        organisationId
+      );
+    }
+
     return res.status(201).json({
       success: true,
       document,
+      invoice,
     });
     } catch (error) {
       return next(error);
