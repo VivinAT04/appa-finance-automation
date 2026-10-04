@@ -57,20 +57,20 @@ function formatDate(value) {
   ).format(date);
 }
 
-function money(value, currency = "INR") {
+function money(value, currency = "GBP") {
   const amount = Number(value || 0);
 
   try {
     return new Intl.NumberFormat(
-      "en-IN",
+      "en-GB",
       {
         style: "currency",
-        currency: currency || "INR",
+        currency: currency || "GBP",
         maximumFractionDigits: 2,
       }
     ).format(amount);
   } catch {
-    return `${currency || "INR"} ${amount.toFixed(2)}`;
+    return `${currency || "GBP"} ${amount.toFixed(2)}`;
   }
 }
 

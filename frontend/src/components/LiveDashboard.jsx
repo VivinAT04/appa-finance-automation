@@ -11,22 +11,22 @@ import {
 
 function formatCurrency(
   amount,
-  currency = "INR"
+  currency = "GBP"
 ) {
   const value = Number(amount || 0);
 
   try {
     return new Intl.NumberFormat(
-      "en-IN",
+      "en-GB",
       {
         style: "currency",
-        currency: currency || "INR",
+        currency: currency || "GBP",
         maximumFractionDigits: 0,
       }
     ).format(value);
   } catch {
     return `₹${value.toLocaleString(
-      "en-IN"
+      "en-GB"
     )}`;
   }
 }
@@ -204,7 +204,7 @@ export default function LiveDashboard({
           <div className="metric-value">
             {Number(
               data.invoices || 0
-            ).toLocaleString("en-IN")}
+            ).toLocaleString("en-GB")}
           </div>
 
           <div className="metric-bottom positive">
@@ -212,7 +212,7 @@ export default function LiveDashboard({
 
             {Number(
               data.matchedInvoices || 0
-            ).toLocaleString("en-IN")}
+            ).toLocaleString("en-GB")}
 
             <span>
               successfully matched
@@ -233,7 +233,7 @@ export default function LiveDashboard({
 
           <div className="metric-value">
             {pendingApprovals.toLocaleString(
-              "en-IN"
+              "en-GB"
             )}
           </div>
 
@@ -241,7 +241,7 @@ export default function LiveDashboard({
             <span>
               {formatCurrency(
                 pendingValue,
-                "INR"
+                "GBP"
               )}{" "}
               awaiting review
             </span>
@@ -268,7 +268,7 @@ export default function LiveDashboard({
 
             {Number(
               automation.succeeded || 0
-            ).toLocaleString("en-IN")}
+            ).toLocaleString("en-GB")}
 
             <span>
               successful items
@@ -287,7 +287,7 @@ export default function LiveDashboard({
 
           <div className="metric-value">
             {openExceptions.toLocaleString(
-              "en-IN"
+              "en-GB"
             )}
           </div>
 
@@ -296,7 +296,7 @@ export default function LiveDashboard({
               {Number(
                 attention.highSeverityExceptions ||
                   0
-              ).toLocaleString("en-IN")}{" "}
+              ).toLocaleString("en-GB")}{" "}
               high severity
             </span>
           </div>
@@ -451,11 +451,11 @@ export default function LiveDashboard({
               <p>
                 {Number(
                   automation.processed || 0
-                ).toLocaleString("en-IN")}{" "}
+                ).toLocaleString("en-GB")}{" "}
                 items processed across{" "}
                 {Number(
                   data.automationRuns || 0
-                ).toLocaleString("en-IN")}{" "}
+                ).toLocaleString("en-GB")}{" "}
                 automation runs.
               </p>
             </div>

@@ -17,7 +17,7 @@ import "./ReportingOperations.css";
 const metadata = {
   amount_tolerance: {
     title: "Amount tolerance",
-    unit: "INR",
+    unit: "GBP",
     type: "number",
     min: 0,
     step: 0.01,

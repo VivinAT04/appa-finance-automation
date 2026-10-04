@@ -15,15 +15,15 @@ import {
 
 import "./FinanceOperations.css";
 
-function money(value, currency = "INR") {
+function money(value, currency = "GBP") {
   try {
-    return new Intl.NumberFormat("en-IN", {
+    return new Intl.NumberFormat("en-GB", {
       style: "currency",
-      currency: currency || "INR",
+      currency: currency || "GBP",
       maximumFractionDigits: 2,
     }).format(Number(value || 0));
   } catch {
-    return `${currency || "INR"} ${Number(
+    return `${currency || "GBP"} ${Number(
       value || 0
     ).toFixed(2)}`;
   }
@@ -183,7 +183,7 @@ export default function ApprovalOperations({
               {money(
                 pendingValue,
                 pending[0]?.currency ||
-                  "INR"
+                  "GBP"
               )}
             </strong>
           </div>

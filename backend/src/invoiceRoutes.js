@@ -9,90 +9,76 @@ const {
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  const organisationId =
-    req.organisation.id;
-
-  res.json({
-    success: true,
-    invoices: listInvoices(
-      organisationId
-    ),
-  });
+router.get("/", async (req, res, next) => {
+  try {
+    const invoices = await listInvoices(req.organisation.id);
+    return res.json({ success: true, invoices });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.get(
-  "/document/:documentId",
-  (req, res) => {
-    const organisationId =
-      req.organisation.id;
-
-    const invoice =
-      getInvoiceByDocumentId(
-        req.params.documentId,
-        organisationId
-      );
+router.get("/document/:documentId", async (req, res, next) => {
+  try {
+    const invoice = await getInvoiceByDocumentId(
+      req.params.documentId,
+      req.organisation.id
+    );
 
     if (!invoice) {
       return res.status(404).json({
         success: false,
-        message:
-          "No extracted invoice exists for this document.",
+        message: "No extracted invoice exists for this document.",
       });
     }
 
-    res.json({
+    return res.json({ success: true, invoice });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/process/:documentId", async (req, res, next) => {
+  try {
+    const invoice = await processInvoiceDocument(
+      req.params.documentId,
+      req.organisation.id
+    );
+
+    if (!invoice) {
+      throw new Error(
+        "Extraction finished but the invoice could not be retrieved."
+      );
+    }
+
+    return res.json({
       success: true,
+      message: "Invoice extraction completed.",
       invoice,
     });
+  } catch (error) {
+    return next(error);
   }
-);
+});
 
-router.post(
-  "/process/:documentId",
-  async (req, res, next) => {
-    try {
-      const organisationId =
-        req.organisation.id;
+router.get("/:id", async (req, res, next) => {
+  try {
+    const invoice = await getInvoiceById(
+      req.params.id,
+      req.organisation.id
+    );
 
-      const invoice =
-        await processInvoiceDocument(
-          req.params.documentId,
-          organisationId
-        );
-
-      res.json({
-        success: true,
-        message:
-          "Invoice extraction completed.",
-        invoice,
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: "Invoice not found.",
       });
-    } catch (error) {
-      next(error);
     }
+
+    return res.json({ success: true, invoice });
+  } catch (error) {
+    return next(error);
   }
-);
-
-router.get("/:id", (req, res) => {
-  const organisationId =
-    req.organisation.id;
-
-  const invoice = getInvoiceById(
-    req.params.id,
-    organisationId
-  );
-
-  if (!invoice) {
-    return res.status(404).json({
-      success: false,
-      message: "Invoice not found.",
-    });
-  }
-
-  res.json({
-    success: true,
-    invoice,
-  });
 });
 
 module.exports = router;

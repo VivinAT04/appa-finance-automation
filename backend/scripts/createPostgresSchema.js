@@ -113,7 +113,7 @@ async function main() {
         supplier_id TEXT NOT NULL
           REFERENCES suppliers(id),
         order_date DATE,
-        currency TEXT NOT NULL DEFAULT 'INR',
+        currency TEXT NOT NULL DEFAULT 'GBP',
         subtotal NUMERIC(18,2) NOT NULL DEFAULT 0,
         tax_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
         total_amount NUMERIC(18,2) NOT NULL DEFAULT 0,

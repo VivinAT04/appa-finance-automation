@@ -144,6 +144,241 @@ router.get(
   }
 );
 
+
+router.post(
+  "/purchase-orders",
+  async (req, res, next) => {
+    try {
+      const organisationId = req.organisation.id;
+
+      const {
+        poNumber,
+        supplierId,
+        orderDate,
+        currency = "GBP",
+        taxRate = 18,
+        lineItems = [],
+      } = req.body || {};
+
+      if (!poNumber || !supplierId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Purchase order number and supplier are required.",
+        });
+      }
+
+      if (!Array.isArray(lineItems) || !lineItems.length) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "At least one purchase-order line item is required.",
+        });
+      }
+
+      const supplier = await db.one(
+        `
+          SELECT id, name
+          FROM suppliers
+          WHERE id = $1
+            AND organisation_id = $2
+        `,
+        [supplierId, organisationId]
+      );
+
+      if (!supplier) {
+        return res.status(404).json({
+          success: false,
+          message: "Supplier not found.",
+        });
+      }
+
+      const duplicate = await db.one(
+        `
+          SELECT id
+          FROM purchase_orders
+          WHERE LOWER(po_number) = LOWER($1)
+            AND organisation_id = $2
+        `,
+        [String(poNumber).trim(), organisationId]
+      );
+
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "A purchase order with this number already exists.",
+        });
+      }
+
+      const normalisedItems = lineItems
+        .map((item) => {
+          const quantity = Number(item.quantity || 0);
+          const unitPrice = Number(item.unitPrice || 0);
+
+          return {
+            description:
+              String(item.description || "").trim(),
+            quantity,
+            unitPrice,
+            lineTotal: Number(
+              (quantity * unitPrice).toFixed(2)
+            ),
+          };
+        })
+        .filter(
+          (item) =>
+            item.description &&
+            item.quantity > 0
+        );
+
+      if (!normalisedItems.length) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Enter a description and quantity for at least one item.",
+        });
+      }
+
+      const subtotal = Number(
+        normalisedItems
+          .reduce(
+            (sum, item) =>
+              sum + item.lineTotal,
+            0
+          )
+          .toFixed(2)
+      );
+
+      const taxAmount = Number(
+        (
+          subtotal *
+          (Number(taxRate || 0) / 100)
+        ).toFixed(2)
+      );
+
+      const totalAmount = Number(
+        (subtotal + taxAmount).toFixed(2)
+      );
+
+      const id = randomUUID();
+      const now = new Date().toISOString();
+
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          `
+            INSERT INTO purchase_orders (
+              id,
+              po_number,
+              supplier_id,
+              order_date,
+              currency,
+              subtotal,
+              tax_amount,
+              total_amount,
+              status,
+              created_at,
+              updated_at,
+              organisation_id
+            )
+            VALUES (
+              $1, $2, $3, $4, $5, $6,
+              $7, $8, $9, $10, $11, $12
+            )
+          `,
+          [
+            id,
+            String(poNumber).trim(),
+            supplierId,
+            orderDate ||
+              new Date()
+                .toISOString()
+                .slice(0, 10),
+            currency || "GBP",
+            subtotal,
+            taxAmount,
+            totalAmount,
+            "Open",
+            now,
+            now,
+            organisationId,
+          ]
+        );
+
+        for (const item of normalisedItems) {
+          await tx.execute(
+            `
+              INSERT INTO purchase_order_items (
+                id,
+                purchase_order_id,
+                description,
+                quantity,
+                unit_price,
+                line_total
+              )
+              VALUES ($1, $2, $3, $4, $5, $6)
+            `,
+            [
+              randomUUID(),
+              id,
+              item.description,
+              item.quantity,
+              item.unitPrice,
+              item.lineTotal,
+            ]
+          );
+        }
+
+        await createAudit(
+          organisationId,
+          "PURCHASE_ORDER_CREATED",
+          "purchase_order",
+          id,
+          `${poNumber} created for ${supplier.name}`,
+          tx
+        );
+      });
+
+      const purchaseOrder = await db.one(
+        `
+          SELECT
+            po.id,
+            po.po_number AS "poNumber",
+            po.supplier_id AS "supplierId",
+            s.name AS "supplierName",
+            s.supplier_code AS "supplierCode",
+            po.order_date AS "orderDate",
+            po.currency,
+            po.subtotal,
+            po.tax_amount AS "taxAmount",
+            po.total_amount AS "totalAmount",
+            po.status,
+            po.created_at AS "createdAt",
+            po.updated_at AS "updatedAt"
+          FROM purchase_orders po
+          INNER JOIN suppliers s
+            ON s.id = po.supplier_id
+           AND s.organisation_id =
+               po.organisation_id
+          WHERE po.id = $1
+            AND po.organisation_id = $2
+        `,
+        [id, organisationId]
+      );
+
+      purchaseOrder.lineItems =
+        normalisedItems;
+
+      return res.status(201).json({
+        success: true,
+        purchaseOrder,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 router.get(
   "/purchase-orders/:id",
   async (req, res) => {
@@ -285,7 +520,7 @@ router.get(
         req.organisation.id;
 
       const openExceptions =
-        await db.one(`
+        (await db.one(`
           SELECT COUNT(*) AS count
           FROM exceptions e
 
@@ -298,10 +533,10 @@ router.get(
           WHERE
             e.status = 'Open'
             AND d.organisation_id = $1
-        `, [organisationId]).count;
+        `, [organisationId])).count;
 
       const pendingApprovals =
-        await db.one(`
+        (await db.one(`
           SELECT COUNT(*) AS count
           FROM invoices i
 
@@ -328,10 +563,10 @@ router.get(
               FROM approvals a
               WHERE a.invoice_id = i.id
             )
-        `, [organisationId]).count;
+        `, [organisationId])).count;
 
       const exceptionInvoices =
-        await db.one(`
+        (await db.one(`
           SELECT
             COUNT(
               DISTINCT e.invoice_id
@@ -347,7 +582,7 @@ router.get(
           WHERE
             e.status = 'Open'
             AND d.organisation_id = $1
-        `, [organisationId]).count;
+        `, [organisationId])).count;
 
       const latestAutomation =
         await db.one(`

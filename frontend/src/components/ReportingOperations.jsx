@@ -19,9 +19,9 @@ function percent(value) {
   return `${number(value).toFixed(1)}%`;
 }
 
-function money(value, currency = "INR") {
+function money(value, currency = "GBP") {
   try {
-    return new Intl.NumberFormat("en-IN", {
+    return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency,
       maximumFractionDigits: 0,

@@ -188,6 +188,14 @@ export function getDocumentFileUrl(id) {
 }
 
 
+export async function processInvoiceDocument(documentId) {
+  const response = await api.post(
+    `/invoices/process/${documentId}`
+  );
+
+  return response.data?.invoice ?? null;
+}
+
 export async function getInvoices() {
   const response = await api.get("/invoices");
   return asArray(response.data.invoices);
@@ -236,6 +244,15 @@ export async function getPurchaseOrders() {
   );
 
   return asArray(response.data.purchaseOrders);
+}
+
+export async function createPurchaseOrder(payload) {
+  const response = await api.post(
+    "/enterprise/purchase-orders",
+    payload
+  );
+
+  return response.data.purchaseOrder;
 }
 
 export async function getPurchaseOrder(id) {
@@ -515,4 +532,20 @@ export async function adminResetUserPassword(
   );
 
   return response.data;
+}
+
+
+export async function submitBillToDocuments(file) {
+  const document = await uploadDocument(
+    file,
+    "Invoice"
+  );
+
+  const invoice =
+    await processInvoiceDocument(document.id);
+
+  return {
+    document,
+    invoice,
+  };
 }

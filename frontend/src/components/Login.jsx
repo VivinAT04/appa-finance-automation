@@ -80,10 +80,13 @@ export default function Login({
     useState("login");
 
   const [email, setEmail] =
-    useState("vivin@appa.local");
+    useState("");
 
   const [password, setPassword] =
     useState("");
+
+  const [demoLoading, setDemoLoading] =
+    useState(false);
 
   const [resetToken, setResetToken] =
     useState("");
@@ -132,6 +135,19 @@ export default function Login({
       email: email.trim(),
       password,
     });
+  }
+
+  async function openDemo() {
+    try {
+      setDemoLoading(true);
+
+      await onLogin({
+        email: "test@gmail.com",
+        password: "Testappa0812",
+      });
+    } finally {
+      setDemoLoading(false);
+    }
   }
 
   async function submitForgot(event) {
@@ -299,6 +315,48 @@ export default function Login({
               : "Sign in securely"}
           </button>
         </form>
+
+          <div
+            style={{
+              marginTop: "18px",
+              paddingTop: "18px",
+              borderTop: "1px solid rgba(148, 163, 184, 0.22)",
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 5px",
+                fontSize: "13px",
+                fontWeight: 600,
+              }}
+            >
+              Want to explore APPA?
+            </p>
+
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: "12px",
+                lineHeight: 1.5,
+                opacity: 0.68,
+              }}
+            >
+              Open the demonstration finance automation workspace.
+            </p>
+
+            <button
+              type="button"
+              className="auth-submit"
+              style={{ width: "100%" }}
+              onClick={openDemo}
+              disabled={loading || demoLoading}
+            >
+              {demoLoading
+                ? "Opening demo..."
+                : "View Demo →"}
+            </button>
+          </div>
       </>
     );
   }
@@ -644,21 +702,7 @@ export default function Login({
               Restricted to authorised APPA
               Finance users.
 
-              <div className="mt-4 text-center text-xs text-slate-500">
-                <span className="font-medium text-slate-600">
-                  Demo Access
-                </span>
-                <span className="mx-2">·</span>
-                Email:
-                <span className="ml-1 font-medium text-slate-700">
-                  test@gmail.com
-                </span>
-                <span className="mx-2">·</span>
-                Password:
-                <span className="ml-1 font-medium text-slate-700">
-                  Testappa0812
-                </span>
-              </div>
+
             </span>
           </div>
         </div>

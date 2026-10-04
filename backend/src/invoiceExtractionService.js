@@ -38,7 +38,7 @@ function money(value) {
 }
 
 function detectCurrency(text) {
-  if (/₹|\bINR\b/i.test(text)) return "INR";
+  if (/₹|\bINR\b/i.test(text)) return "GBP";
   if (/£|\bGBP\b/i.test(text)) return "GBP";
   if (/\$|\bUSD\b/i.test(text)) return "USD";
   if (/€|\bEUR\b/i.test(text)) return "EUR";
