@@ -349,11 +349,15 @@ async function extractPdfText(filePath) {
       const content = await page.getTextContent();
 
       const text = content.items
-        .map((item) =>
-          typeof item.str === "string" ? item.str : ""
-        )
-        .filter(Boolean)
-        .join(" ");
+        .map((item) => {
+          if (typeof item.str !== "string") {
+            return "";
+          }
+
+          return item.str + (item.hasEOL ? "\n" : " ");
+        })
+        .join("")
+        .trim();
 
       pages.push(text);
 

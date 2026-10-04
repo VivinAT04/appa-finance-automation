@@ -170,7 +170,7 @@ function buildBillPdf(bill, po) {
     ),
     "",
     `Subtotal: GBP ${t.subtotal.toFixed(2)}`,
-    `VAT (${bill.taxRate}%): INR ${t.taxAmount.toFixed(
+    `VAT (${bill.taxRate}%): GBP ${t.taxAmount.toFixed(
       2
     )}`,
     `TOTAL: GBP ${t.totalAmount.toFixed(2)}`,
