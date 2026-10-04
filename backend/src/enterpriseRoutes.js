@@ -314,9 +314,10 @@ router.post(
                 description,
                 quantity,
                 unit_price,
-                line_total
+                line_total,
+                created_at
               )
-              VALUES ($1, $2, $3, $4, $5, $6)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
             `,
             [
               randomUUID(),
@@ -325,6 +326,7 @@ router.post(
               item.quantity,
               item.unitPrice,
               item.lineTotal,
+              now,
             ]
           );
         }

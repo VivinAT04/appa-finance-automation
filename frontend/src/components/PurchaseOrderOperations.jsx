@@ -548,7 +548,7 @@ export default function PurchaseOrderOperations({
             </span>
             <h2>Create Purchase Order</h2>
             <p>
-              Create a real INR purchase order
+              Create a GBP purchase order
               for invoice matching.
             </p>
           </div>
@@ -643,7 +643,7 @@ export default function PurchaseOrderOperations({
             (item, index) => (
               <div
                 key={index}
-                className="procurement-summary-grid"
+                className="procurement-summary-grid procurement-line-item-row"
               >
                 <input
                   placeholder="Description"
@@ -714,22 +714,36 @@ export default function PurchaseOrderOperations({
             )
           )}
 
-          <button
-            type="button"
-            className="procurement-secondary-button"
-            onClick={() =>
-              setPOForm({
-                ...poForm,
-                lineItems: [
-                  ...poForm.lineItems,
-                  newLine(),
-                ],
-              })
-            }
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-start",
+              marginTop: "14px",
+              marginBottom: "18px",
+              clear: "both",
+            }}
           >
-            <Plus size={14} />
-            Add item
-          </button>
+            <button
+              type="button"
+              className="procurement-secondary-button"
+              style={{
+                width: "auto",
+                minWidth: "110px",
+              }}
+              onClick={() =>
+                setPOForm({
+                  ...poForm,
+                  lineItems: [
+                    ...poForm.lineItems,
+                    newLine(),
+                  ],
+                })
+              }
+            >
+              <Plus size={14} />
+              Add item
+            </button>
+          </div>
 
           <div className="procurement-detail-hero">
             <div>
