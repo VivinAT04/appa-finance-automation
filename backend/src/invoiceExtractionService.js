@@ -38,7 +38,7 @@ function money(value) {
 }
 
 function detectCurrency(text) {
-  if (/₹|\bINR\b/i.test(text)) return "GBP";
+  if (/₹|\bINR\b/i.test(text)) return "INR";
   if (/£|\bGBP\b/i.test(text)) return "GBP";
   if (/\$|\bUSD\b/i.test(text)) return "USD";
   if (/€|\bEUR\b/i.test(text)) return "EUR";
@@ -216,11 +216,11 @@ function parseInvoiceText(rawText) {
     purchaseOrderNumber:
       capture(
         text,
-        /Purchase\s*Order\s*:\s*([^\n]+)/i
+        /Purchase\s*Order\s*:\s*([A-Za-z0-9][A-Za-z0-9._/-]*)/i
       ) ||
       capture(
         text,
-        /\bPO\s*(?:Number|No\.?|#)\s*:\s*([^\n]+)/i
+        /\bPO\s*(?:Number|No\.?|#)\s*:\s*([A-Za-z0-9][A-Za-z0-9._/-]*)/i
       ),
 
     subtotal: money(
